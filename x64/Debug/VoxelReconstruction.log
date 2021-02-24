@@ -1,0 +1,29 @@
+﻿  Camera.cpp
+  Glut.cpp
+  Scene3DRenderer.cpp
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,27): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774): error C2144: syntax error: 'unknown-type' should be preceded by ')'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,1): error C2660: 'cv::LineIterator::init': function does not take 2 arguments
+C:\opencv\build\include\opencv2\imgproc.hpp(4794,10): message : see declaration of 'cv::LineIterator::init'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774): error C2144: syntax error: 'unknown-type' should be preceded by ';'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,27): error C2143: syntax error: missing ')' before '.'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,1): error C3928: '->': trailing return type is not allowed after a parenthesized declarator
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,27): error C3484: syntax error: expected '->' before the return type
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,1): error C3613: missing return type after '->' ('int' assumed)
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,1): error C2082: redefinition of formal parameter 'pt1'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,27): error C2146: syntax error: missing ';' before identifier 'x'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,1): error C2059: syntax error: ')'
+C:\opencv\build\include\opencv2\imgproc.hpp(4774,27): error C2065: 'x': undeclared identifier
+C:\opencv\build\include\opencv2\imgproc.hpp(4775,27): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4775,1): error C2062: type 'unknown-type' unexpected
+C:\opencv\build\include\opencv2\imgproc.hpp(4775,1): error C2059: syntax error: ')'
+C:\opencv\build\include\opencv2\imgproc.hpp(4776,27): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4776,1): error C2059: syntax error: ')'
+C:\opencv\build\include\opencv2\imgproc.hpp(4776,52): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4777,27): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4777,1): error C2059: syntax error: ')'
+C:\opencv\build\include\opencv2\imgproc.hpp(4777,52): error C2589: '(': illegal token on right side of '::'
+C:\opencv\build\include\opencv2\imgproc.hpp(4778,1): error C2059: syntax error: ')'
+  main.cpp
+  VoxelReconstruction.cpp
+  Generating Code...
