@@ -1,0 +1,2 @@
+C:\Fast Local Git Repos\cv2021a2\x64\Debug\VoxelReconstruction.exe
+C:\Fast Local Git Repos\cv2021a2\x64\Debug\VoxelReconstruction.pdb

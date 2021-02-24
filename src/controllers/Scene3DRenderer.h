@@ -11,6 +11,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/operations.hpp>
 #include <vector>
+
+#define NOMINMAX
 #ifdef _WIN32
 #include <Windows.h>
 #endif
