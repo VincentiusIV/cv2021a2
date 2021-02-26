@@ -44,3 +44,4 @@ out/*
 *.log
 *.pdb
 *.idb
+x64/*

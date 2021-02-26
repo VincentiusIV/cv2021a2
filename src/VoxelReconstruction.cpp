@@ -45,9 +45,7 @@ VoxelReconstruction::VoxelReconstruction(const string &dp, const int cva) :
 		 */
 		std::cout << full_path.str() << General::BackgroundImageFile << std::endl;
 		std::cout << full_path.str() << General::VideoFile << std::endl;
-		assert(
-			General::fexists(full_path.str() + General::BackgroundImageFile)
-			&&
+		assert(General::fexists(full_path.str() + General::BackgroundImageFile) &&
 			General::fexists(full_path.str() + General::VideoFile)
 		);
 
