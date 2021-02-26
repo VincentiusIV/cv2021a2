@@ -29,8 +29,7 @@ namespace nl_uu_science_gmt
 /**
  * Main constructor, initialized all cameras
  */
-VoxelReconstruction::VoxelReconstruction(const string &dp, const int cva) :
-		m_data_path(dp), m_cam_views_amount(cva)
+VoxelReconstruction::VoxelReconstruction(const string &dp, const int cva) : m_data_path(dp), m_cam_views_amount(cva)
 {
 	const string cam_path = m_data_path + "cam";
 
