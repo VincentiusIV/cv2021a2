@@ -80,6 +80,14 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("S", VIDEO_WINDOW, &m_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &m_v_threshold, 255);
 
+	// TODO: Automatic threshhold calculation
+	// Andrea
+	// Two suggestions: 
+	// 1.	Assume that a good segmentation has little noise(few isolated white pixels, few isolated black pixels).
+	// 		Implement a function that tries out values and optimizes the amount of noise. Be creative in how you approach this. Perhaps the functions erodeand dilate can help.
+	// 2.	Make a manual segmentation of a frame into foregroundand background(e.g.in Paint).
+	//		Then implement a function that finds the optimal thresholds by comparing the algorithm’s output to the manual segmentation.The XOR function might be of use here.
+
 	createFloorGrid();
 	setTopView();
 }
@@ -130,6 +138,8 @@ void Scene3DRenderer::processForeground(
 	vector<Mat> channels;
 	split(hsv_image, channels);  // Split the HSV-channels for further analysis
 
+	// TODO: 
+
 	// Background subtraction H
 	Mat tmp, foreground, background;
 	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
@@ -146,6 +156,10 @@ void Scene3DRenderer::processForeground(
 	bitwise_or(foreground, background, foreground);
 
 	// Improve the foreground image
+
+	// TODO: Post-processing: e.g. erosion, dilation, blob detection or Graph cuts (Seam finding) could work. Use OpenCV functions for this!!!
+	// Vincent
+
 
 	camera->setForegroundImage(foreground);
 }
