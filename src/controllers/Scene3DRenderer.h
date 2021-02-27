@@ -72,6 +72,11 @@ class Scene3DRenderer
 	int m_v_threshold;                        // Value threshold number for background subtraction
 	int m_pv_threshold;                       // Value threshold value at previous iteration (update awareness)
 
+	int erosionElement;						  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int erosionSize;						  // Erosion kernel size.
+	int dilationElement;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int dilationSize;					      // Dilation kernel size.
+
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
 
@@ -82,12 +87,10 @@ class Scene3DRenderer
 #endif
 
 public:
-	Scene3DRenderer(
-			Reconstructor &, const std::vector<Camera*> &);
+	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
 
-	void processForeground(
-			Camera*);
+	void processForeground(Camera*);
 
 	bool processFrame();
 	void setCamera(

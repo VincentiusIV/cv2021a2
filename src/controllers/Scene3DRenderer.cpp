@@ -79,6 +79,11 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("H", VIDEO_WINDOW, &m_h_threshold, 255);
 	createTrackbar("S", VIDEO_WINDOW, &m_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &m_v_threshold, 255);
+	const int maxElement = 3, maxSize = 21;
+	createTrackbar("Erosion Element", VIDEO_WINDOW, &erosionElement, maxElement);
+	createTrackbar("Erosion Kernel Size", VIDEO_WINDOW, &erosionSize, maxSize);
+	createTrackbar("Dilation Element", VIDEO_WINDOW, &dilationElement, maxElement);
+	createTrackbar("Dilation Kernel Size", VIDEO_WINDOW, &dilationSize, maxSize);
 
 	// TODO: Automatic threshhold calculation
 	// Andrea
@@ -158,8 +163,20 @@ void Scene3DRenderer::processForeground(
 	// Improve the foreground image
 
 	// TODO: Post-processing: e.g. erosion, dilation, blob detection or Graph cuts (Seam finding) could work. Use OpenCV functions for this!!!
-	// Vincent
+	// Apply erosion/dilation.
+	if (erosionElement != 0)
+	{
+		int erosionType = (erosionElement == 1) ? MORPH_RECT : ((erosionElement == 2) ? MORPH_CROSS : MORPH_ELLIPSE);
+		Mat kernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
+		erode(foreground, foreground, kernel);
+	}
 
+	if (dilationElement != 0)
+	{
+		int dilationType = (dilationElement == 1) ? MORPH_RECT : ((dilationElement == 2) ? MORPH_CROSS : MORPH_ELLIPSE);
+		Mat kernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
+		dilate(foreground, foreground, kernel);
+	}
 
 	camera->setForegroundImage(foreground);
 }

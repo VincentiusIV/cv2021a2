@@ -1,6 +1,2 @@
-﻿  VoxelReconstruction.cpp
-  Glut.cpp
-  Reconstructor.cpp
-  Scene3DRenderer.cpp
-  Generating Code...
+﻿  Scene3DRenderer.cpp
   VoxelReconstruction.vcxproj -> C:\Fast Local Git Repos\cv2021a2\x64\Debug\VoxelReconstruction.exe
