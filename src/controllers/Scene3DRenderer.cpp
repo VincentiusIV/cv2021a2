@@ -13,6 +13,7 @@
 #include <opencv2/imgproc/types_c.h>
 #include <stddef.h>
 #include <string>
+#include <iostream>
 
 #include "../utilities/General.h"
 
@@ -89,12 +90,13 @@ Scene3DRenderer::Scene3DRenderer(
 	// Andrea
 	// Two suggestions: 
 	// 1.	Assume that a good segmentation has little noise(few isolated white pixels, few isolated black pixels).
-	// 		Implement a function that tries out values and optimizes the amount of noise. Be creative in how you approach this. Perhaps the functions erodeand dilate can help.
+	// 		Implement a function that tries out values and optimizes the amount of noise. Be creative in how you approach this. Perhaps the functions erode and dilate can help.
 	// 2.	Make a manual segmentation of a frame into foregroundand background(e.g.in Paint).
 	//		Then implement a function that finds the optimal thresholds by comparing the algorithm’s output to the manual segmentation.The XOR function might be of use here.
 
 	createFloorGrid();
 	setTopView();
+
 }
 
 /**
@@ -129,12 +131,66 @@ bool Scene3DRenderer::processFrame()
 	return true;
 }
 
+double calculateNoise(Mat img) {
+	double noise = 0.0;
+	
+
+	for (int y = 0; y < img.rows; y++)
+	{
+		for (int x = 0; x < img.cols; x++)
+		{
+			auto pixel = img.at<uchar>(y, x);
+
+			int equalNeighbourCount = 0;
+			// Go over neighbours of current pixel.
+			for (int i = -1; i < 2; i++)
+			{
+				for (int j = -1; j < 2; j++)
+				{
+					if (i == 0 && j == 0)
+						continue;
+					int xi = x + i;
+					int yj = y + j;
+					if (xi < 0 || xi >= img.cols)
+						continue;
+					if (yj < 0 || yj >= img.rows)
+						continue;
+					auto neighbour = img.at<uchar>(yj, xi);
+					if (pixel == neighbour)
+						++equalNeighbourCount;
+				}
+			}
+
+			if(equalNeighbourCount < 5)
+				noise += 1.0 - (double)equalNeighbourCount / 8.0;
+		}
+	}
+	return noise;
+}
+
+void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt)
+{
+	Mat tmp, background;
+
+	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
+	threshold(tmp, foreground, ht, 255, CV_THRESH_BINARY);
+
+	// Background subtraction S
+	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
+	threshold(tmp, background, st, 255, CV_THRESH_BINARY);
+	bitwise_and(foreground, background, foreground);
+
+	// Background subtraction V
+	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
+	threshold(tmp, background, vt, 255, CV_THRESH_BINARY);
+	bitwise_or(foreground, background, foreground);
+}
+
 /**
  * Separate the background from the foreground
  * ie.: Create an 8 bit image where only the foreground of the scene is white (255)
  */
-void Scene3DRenderer::processForeground(
-		Camera* camera)
+void Scene3DRenderer::processForeground(Camera* camera)
 {
 	assert(!camera->getFrame().empty());
 	Mat hsv_image;
@@ -143,27 +199,38 @@ void Scene3DRenderer::processForeground(
 	vector<Mat> channels;
 	split(hsv_image, channels);  // Split the HSV-channels for further analysis
 
-	// TODO: 
-
 	// Background subtraction H
-	Mat tmp, foreground, background;
-	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
-	threshold(tmp, foreground, m_h_threshold, 255, CV_THRESH_BINARY);
+	static float lastNoise = 100000000000000000;
+	const int MAX_ITER = 1;
+	RNG rng;
 
-	// Background subtraction S
-	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
-	threshold(tmp, background, m_s_threshold, 255, CV_THRESH_BINARY);
-	bitwise_and(foreground, background, foreground);
+	for (int i = 0; i < MAX_ITER; i++)
+	{
+		Mat foreground;
+		// 1. set hsv thresholds to random values
+		int ht = rng.uniform(0, 255), st = rng.uniform(0, 255), vt = rng.uniform(0, 255);
 
-	// Background subtraction V
-	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
-	threshold(tmp, background, m_v_threshold, 255, CV_THRESH_BINARY);
-	bitwise_or(foreground, background, foreground);
+		// 2. try them out
+		ApplyThresholds(channels, camera, foreground, ht, st, vt);
+		
+		// 3. check noise, see if its lower than noise current hsv thresholds
+		float noise = calculateNoise(foreground);
 
-	// Improve the foreground image
+		if (noise < lastNoise)
+		{
+			lastNoise = noise;
+			m_h_threshold = ht;
+			m_s_threshold = st;
+			m_v_threshold = vt;
+		}
+	}
 
-	// TODO: Post-processing: e.g. erosion, dilation, blob detection or Graph cuts (Seam finding) could work. Use OpenCV functions for this!!!
-	// Apply erosion/dilation.
+	Mat foreground;
+	ApplyThresholds(channels, camera, foreground, m_h_threshold, m_s_threshold, m_v_threshold);
+
+	// Post process the foreground image
+
+	// Apply erosion/dilation. Either can be turned off by setting element to 0.
 	if (erosionElement != 0)
 	{
 		int erosionType = (erosionElement == 1) ? MORPH_RECT : ((erosionElement == 2) ? MORPH_CROSS : MORPH_ELLIPSE);
@@ -177,6 +244,8 @@ void Scene3DRenderer::processForeground(
 		Mat kernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
 		dilate(foreground, foreground, kernel);
 	}
+
+	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
 
 	camera->setForegroundImage(foreground);
 }

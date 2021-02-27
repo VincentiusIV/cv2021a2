@@ -124,6 +124,7 @@ void Reconstructor::initialize()
 				voxel->z = z;
 				voxel->camera_projection = vector<Point>(m_cameras.size());
 				voxel->valid_camera_projection = vector<int>(m_cameras.size(), 0);
+				
 
 				const int p = zp * plane + yp * plane_x + xp;  // The voxel's index
 
@@ -138,6 +139,8 @@ void Reconstructor::initialize()
 					if (point.x >= 0 && point.x < m_plane_size.width && point.y >= 0 && point.y < m_plane_size.height)
 						voxel->valid_camera_projection[(int) c] = 1;
 				}
+
+				//voxel->color = average of all pixel colors from 2D camera points.
 
 				//Writing voxel 'p' is not critical as it's unique (thread safe)
 				m_voxels[p] = voxel;

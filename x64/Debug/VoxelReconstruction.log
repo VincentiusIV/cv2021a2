@@ -1,2 +1,4 @@
 ﻿  Scene3DRenderer.cpp
+C:\Fast Local Git Repos\cv2021a2\src\controllers\Scene3DRenderer.cpp(203,45): warning C4305: 'initializing': truncation from '__int64' to 'float'
+C:\Fast Local Git Repos\cv2021a2\src\controllers\Scene3DRenderer.cpp(217,15): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   VoxelReconstruction.vcxproj -> C:\Fast Local Git Repos\cv2021a2\x64\Debug\VoxelReconstruction.exe

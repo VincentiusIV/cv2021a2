@@ -90,6 +90,8 @@ public:
 	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
 
+	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
+
 	void processForeground(Camera*);
 
 	bool processFrame();
