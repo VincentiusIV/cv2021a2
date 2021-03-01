@@ -209,8 +209,8 @@ void Scene3DRenderer::processForeground(Camera* camera)
 
 	// Background subtraction H
 	static float lastNoise = 100000000000000000;
-	const int MAX_ITER = 0;
-	RNG rng;
+	const int MAX_ITER = 1;
+	static RNG rng;
 
 	for (int i = 0; i < MAX_ITER; i++)
 	{
