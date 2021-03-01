@@ -93,7 +93,7 @@ Scene3DRenderer::Scene3DRenderer(
 	// 		Implement a function that tries out values and optimizes the amount of noise. Be creative in how you approach this. Perhaps the functions erode and dilate can help.
 	// 2.	Make a manual segmentation of a frame into foregroundand background(e.g.in Paint).
 	//		Then implement a function that finds the optimal thresholds by comparing the algorithm’s output to the manual segmentation.The XOR function might be of use here.
-
+	
 	createFloorGrid();
 	setTopView();
 
@@ -128,13 +128,15 @@ bool Scene3DRenderer::processFrame()
 		assert(m_cameras[c] != NULL);
 		processForeground(m_cameras[c]);
 	}
+
+
+
 	return true;
 }
 
 double calculateNoise(Mat img) {
 	double noise = 0.0;
 	
-
 	for (int y = 0; y < img.rows; y++)
 	{
 		for (int x = 0; x < img.cols; x++)
@@ -161,8 +163,14 @@ double calculateNoise(Mat img) {
 				}
 			}
 
-			if(equalNeighbourCount < 5)
-				noise += 1.0 - (double)equalNeighbourCount / 8.0;
+			if (equalNeighbourCount < 5)
+			{
+				double pixelNoise = 1.0 - (double)equalNeighbourCount / 8.0;
+				// If pixel is black, count it doubly.
+				if (pixel == 0)
+					pixelNoise *= 2.0;
+				noise += pixelNoise;
+			}
 		}
 	}
 	return noise;
@@ -201,14 +209,14 @@ void Scene3DRenderer::processForeground(Camera* camera)
 
 	// Background subtraction H
 	static float lastNoise = 100000000000000000;
-	const int MAX_ITER = 1;
+	const int MAX_ITER = 0;
 	RNG rng;
 
 	for (int i = 0; i < MAX_ITER; i++)
 	{
 		Mat foreground;
-		// 1. set hsv thresholds to random values
-		int ht = rng.uniform(0, 255), st = rng.uniform(0, 255), vt = rng.uniform(0, 255);
+		// 1. set hsv thresholds to random values, dont set these to above 230 so that we dont get a completely black image.
+		int ht = rng.uniform(0, 230), st = rng.uniform(0, 230), vt = rng.uniform(0, 230);
 
 		// 2. try them out
 		ApplyThresholds(channels, camera, foreground, ht, st, vt);
@@ -222,6 +230,7 @@ void Scene3DRenderer::processForeground(Camera* camera)
 			m_h_threshold = ht;
 			m_s_threshold = st;
 			m_v_threshold = vt;
+			cout << "Found better thresholds h:" << ht << ",s:" << st << "v:" << vt << endl;
 		}
 	}
 
