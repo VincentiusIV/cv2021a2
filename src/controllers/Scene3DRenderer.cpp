@@ -80,7 +80,10 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("H", VIDEO_WINDOW, &m_h_threshold, 255);
 	createTrackbar("S", VIDEO_WINDOW, &m_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &m_v_threshold, 255);
-	const int maxElement = 3, maxSize = 21;
+	createTrackbar("Contours", VIDEO_WINDOW, &targetNumOfContours, 1000);
+	const int maxElement = 2, maxSize = 21;
+	createTrackbar("Pre Erode Element", VIDEO_WINDOW, &preErosionElement, maxElement);
+	createTrackbar("Pre Erode Size", VIDEO_WINDOW, &preErosionSize, maxSize);
 	createTrackbar("Erosion Element", VIDEO_WINDOW, &erosionElement, maxElement);
 	createTrackbar("Erosion Kernel Size", VIDEO_WINDOW, &erosionSize, maxSize);
 	createTrackbar("Dilation Element", VIDEO_WINDOW, &dilationElement, maxElement);
@@ -129,51 +132,7 @@ bool Scene3DRenderer::processFrame()
 		processForeground(m_cameras[c]);
 	}
 
-
-
 	return true;
-}
-
-double calculateNoise(Mat img) {
-	double noise = 0.0;
-	
-	for (int y = 0; y < img.rows; y++)
-	{
-		for (int x = 0; x < img.cols; x++)
-		{
-			auto pixel = img.at<uchar>(y, x);
-
-			int equalNeighbourCount = 0;
-			// Go over neighbours of current pixel.
-			for (int i = -1; i < 2; i++)
-			{
-				for (int j = -1; j < 2; j++)
-				{
-					if (i == 0 && j == 0)
-						continue;
-					int xi = x + i;
-					int yj = y + j;
-					if (xi < 0 || xi >= img.cols)
-						continue;
-					if (yj < 0 || yj >= img.rows)
-						continue;
-					auto neighbour = img.at<uchar>(yj, xi);
-					if (pixel == neighbour)
-						++equalNeighbourCount;
-				}
-			}
-
-			if (equalNeighbourCount < 5)
-			{
-				double pixelNoise = 1.0 - (double)equalNeighbourCount / 8.0;
-				// If pixel is black, count it doubly.
-				if (pixel == 0)
-					pixelNoise *= 2.0;
-				noise += pixelNoise;
-			}
-		}
-	}
-	return noise;
 }
 
 void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt)
@@ -208,55 +167,122 @@ void Scene3DRenderer::processForeground(Camera* camera)
 	split(hsv_image, channels);  // Split the HSV-channels for further analysis
 
 	// Background subtraction H
-	static float lastNoise = 100000000000000000;
+	static float prevNoise = 1000000000000000;
 	const int MAX_ITER = 1;
 	static RNG rng;
-
+	bool foundBetter = false;
 	for (int i = 0; i < MAX_ITER; i++)
 	{
 		Mat foreground;
-		// 1. set hsv thresholds to random values, dont set these to above 230 so that we dont get a completely black image.
-		int ht = rng.uniform(0, 230), st = rng.uniform(0, 230), vt = rng.uniform(0, 230);
-
-		// 2. try them out
+		// 1. set hsv thresholds to random values...
+		// - hue & saturation thresholds greater than 100 tend to remove more detail from the foreground than remove noise.
+		//   its fine to keep some noise outside the silhoutte since we can easily remove this with erosion afterwards.
+		// - value thresholds greater than 100 (in combination with medium/high hue/saturation threshhold) 
+		//   have a good chance at wiping the entire image, clearly undesirable.
+		int ht = rng.uniform(0, 80), st = rng.uniform(0, 80), vt = rng.uniform(0, 80);
+		// 2. try out random thresholds.
 		ApplyThresholds(channels, camera, foreground, ht, st, vt);
-		
-		// 3. check noise, see if its lower than noise current hsv thresholds
-		float noise = calculateNoise(foreground);
+		// 3. check , see if its lower than noise current hsv thresholds
+		double noise = 0.0;
+		// CalculateNoise(foreground, noise); // Not a great estimator for voxel reconstruction, see report.
+		// Instead, calculate noise based on the amount of contours
 
-		if (noise < lastNoise)
+		// 4. Erode temporarily to remove most noise outside silhoutte and exaggerate noise inside.
+		int erosionType = (preErosionElement == 0) ? MORPH_RECT : ((preErosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+		Mat kernel = getStructuringElement(erosionType, Size(2 * preErosionSize + 1, 2 * preErosionSize + 1), Point(preErosionSize, preErosionSize));
+		erode(foreground, foreground, kernel);
+		// 5. Find contours.
+		vector<vector<Point> > contours;
+		vector<Vec4i> hierarchy;
+		findContours(foreground, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+		noise = contours.size();
+		// 6. If lower noise, use it.
+		if (noise < prevNoise)
 		{
-			lastNoise = noise;
+			prevNoise = noise;
 			m_h_threshold = ht;
 			m_s_threshold = st;
 			m_v_threshold = vt;
-			cout << "Found better thresholds h:" << ht << ",s:" << st << "v:" << vt << endl;
+			cout << "Found better thresholds h:" << m_h_threshold << ",s:" << m_s_threshold << ",v:" << m_v_threshold << endl;
+			foundBetter = true;
+			Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
+			for (size_t i = 0; i < contours.size(); i++)
+			{
+				Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+				drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
+			}    
+			imshow("Contours", drawing);
 		}
 	}
 
 	Mat foreground;
 	ApplyThresholds(channels, camera, foreground, m_h_threshold, m_s_threshold, m_v_threshold);
 
+	// Find n draw contours
+
+	//Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
+	//for (size_t i = 0; i < contours.size(); i++)
+	//{
+	//	Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+	//	drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
+	//}    
+	//imshow("Contours", drawing);
 	// Post process the foreground image
 
 	// Apply erosion/dilation. Either can be turned off by setting element to 0.
-	if (erosionElement != 0)
-	{
-		int erosionType = (erosionElement == 1) ? MORPH_RECT : ((erosionElement == 2) ? MORPH_CROSS : MORPH_ELLIPSE);
-		Mat kernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
-		erode(foreground, foreground, kernel);
-	}
+	int erosionType = (erosionElement == 0) ? MORPH_RECT : ((erosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat erodeKernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
+	erode(foreground, foreground, erodeKernel);
 
-	if (dilationElement != 0)
-	{
-		int dilationType = (dilationElement == 1) ? MORPH_RECT : ((dilationElement == 2) ? MORPH_CROSS : MORPH_ELLIPSE);
-		Mat kernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
-		dilate(foreground, foreground, kernel);
-	}
+	int dilationType = (dilationElement == 0) ? MORPH_RECT : ((dilationElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat dilateKernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
+	dilate(foreground, foreground, dilateKernel);
 
 	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
 
 	camera->setForegroundImage(foreground);
+}
+
+void Scene3DRenderer::CalculateNoise(cv::Mat& foreground, double& noise)
+{
+	for (int y = 0; y < foreground.rows; y++)
+	{
+		for (int x = 0; x < foreground.cols; x++)
+		{
+			auto pixel = foreground.at<uchar>(y, x);
+
+			int equalNeighbourCount = 0;
+			// Go over neighbours of current pixel.
+			for (int i = -1; i < 2; i++)
+			{
+				for (int j = -1; j < 2; j++)
+				{
+					if (i == 0 && j == 0)
+						continue;
+					int xi = x + i;
+					int yj = y + j;
+					if (xi < 0 || xi >= foreground.cols)
+						continue;
+					if (yj < 0 || yj >= foreground.rows)
+						continue;
+					auto neighbour = foreground.at<uchar>(yj, xi);
+					if (pixel == neighbour)
+						++equalNeighbourCount;
+				}
+			}
+
+			if (equalNeighbourCount < 5)
+			{
+				double pixelNoise = 1.0 - (double)equalNeighbourCount / 8.0;
+				// If pixel is black, count it doubly.
+				if (pixel == 0)
+				{
+					pixelNoise = pixelNoise * 2;
+				}
+				noise += pixelNoise;
+			}
+		}
+	}
 }
 
 /**

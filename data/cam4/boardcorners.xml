@@ -2,6 +2,7 @@
 <opencv_storage>
 <CornersAmount>48</CornersAmount>
 <Corner_0>
+<<<<<<< HEAD
   232 349</Corner_0>
 <Corner_1>
   241 346</Corner_1>
@@ -51,11 +52,63 @@
   315 335</Corner_23>
 <Corner_24>
   256 360</Corner_24>
+=======
+  231 349</Corner_0>
+<Corner_1>
+  240 347</Corner_1>
+<Corner_2>
+  250 344</Corner_2>
+<Corner_3>
+  261 341</Corner_3>
+<Corner_4>
+  270 337</Corner_4>
+<Corner_5>
+  278 335</Corner_5>
+<Corner_6>
+  288 332</Corner_6>
+<Corner_7>
+  295 331</Corner_7>
+<Corner_8>
+  240 354</Corner_8>
+<Corner_9>
+  250 350</Corner_9>
+<Corner_10>
+  259 347</Corner_10>
+<Corner_11>
+  269 343</Corner_11>
+<Corner_12>
+  277 341</Corner_12>
+<Corner_13>
+  288 339</Corner_13>
+<Corner_14>
+  296 336</Corner_14>
+<Corner_15>
+  304 334</Corner_15>
+<Corner_16>
+  248 356</Corner_16>
+<Corner_17>
+  259 353</Corner_17>
+<Corner_18>
+  269 350</Corner_18>
+<Corner_19>
+  279 347</Corner_19>
+<Corner_20>
+  288 344</Corner_20>
+<Corner_21>
+  298 341</Corner_21>
+<Corner_22>
+  304 337</Corner_22>
+<Corner_23>
+  314 335</Corner_23>
+<Corner_24>
+  259 361</Corner_24>
+>>>>>>> origin/master
 <Corner_25>
   268 356</Corner_25>
 <Corner_26>
   278 353</Corner_26>
 <Corner_27>
+<<<<<<< HEAD
   288 349</Corner_27>
 <Corner_28>
   296 346</Corner_28>
@@ -93,6 +146,45 @@
   317 353</Corner_44>
 <Corner_45>
   326 349</Corner_45>
+=======
+  287 349</Corner_27>
+<Corner_28>
+  297 347</Corner_28>
+<Corner_29>
+  306 344</Corner_29>
+<Corner_30>
+  314 340</Corner_30>
+<Corner_31>
+  323 338</Corner_31>
+<Corner_32>
+  267 364</Corner_32>
+<Corner_33>
+  278 360</Corner_33>
+<Corner_34>
+  288 357</Corner_34>
+<Corner_35>
+  298 352</Corner_35>
+<Corner_36>
+  306 349</Corner_36>
+<Corner_37>
+  316 347</Corner_37>
+<Corner_38>
+  324 343</Corner_38>
+<Corner_39>
+  332 340</Corner_39>
+<Corner_40>
+  276 368</Corner_40>
+<Corner_41>
+  287 364</Corner_41>
+<Corner_42>
+  296 360</Corner_42>
+<Corner_43>
+  307 356</Corner_43>
+<Corner_44>
+  316 353</Corner_44>
+<Corner_45>
+  326 350</Corner_45>
+>>>>>>> origin/master
 <Corner_46>
   336 346</Corner_46>
 <Corner_47>

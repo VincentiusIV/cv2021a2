@@ -72,8 +72,12 @@ class Scene3DRenderer
 	int m_v_threshold;                        // Value threshold number for background subtraction
 	int m_pv_threshold;                       // Value threshold value at previous iteration (update awareness)
 
-	int erosionElement;						  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
-	int erosionSize;						  // Erosion kernel size.
+	int targetNumOfContours = 1;		      // Target number of contours that should appear in the image.
+
+	int preErosionElement = 2;				// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int preErosionSize = 1;					// Erosion kernel size.
+	int erosionElement = 0;					// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int erosionSize = 0;					// Erosion kernel size.
 	int dilationElement;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
 	int dilationSize;					      // Dilation kernel size.
 
@@ -93,10 +97,9 @@ public:
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
 
 	void processForeground(Camera*);
-
+	void CalculateNoise(cv::Mat& foreground, double& noise);
 	bool processFrame();
-	void setCamera(
-			int);
+	void setCamera(int);
 	void setTopView();
 
 	const std::vector<Camera*>& getCameras() const

@@ -2,6 +2,7 @@
 <opencv_storage>
 <CornersAmount>48</CornersAmount>
 <Corner_0>
+<<<<<<< HEAD
   192 455</Corner_0>
 <Corner_1>
   191 447</Corner_1>
@@ -97,4 +98,101 @@
   274 404</Corner_46>
 <Corner_47>
   273 398</Corner_47>
+=======
+  273 398</Corner_0>
+<Corner_1>
+  276 404</Corner_1>
+<Corner_2>
+  278 410</Corner_2>
+<Corner_3>
+  280 417</Corner_3>
+<Corner_4>
+  284 425</Corner_4>
+<Corner_5>
+  286 431</Corner_5>
+<Corner_6>
+  290 441</Corner_6>
+<Corner_7>
+  294 450</Corner_7>
+<Corner_8>
+  256 400</Corner_8>
+<Corner_9>
+  258 405</Corner_9>
+<Corner_10>
+  259 412</Corner_10>
+<Corner_11>
+  262 419</Corner_11>
+<Corner_12>
+  264 426</Corner_12>
+<Corner_13>
+  267 435</Corner_13>
+<Corner_14>
+  269 441</Corner_14>
+<Corner_15>
+  273 452</Corner_15>
+<Corner_16>
+  242 401</Corner_16>
+<Corner_17>
+  242 407</Corner_17>
+<Corner_18>
+  245 413</Corner_18>
+<Corner_19>
+  245 420</Corner_19>
+<Corner_20>
+  248 427</Corner_20>
+<Corner_21>
+  248 435</Corner_21>
+<Corner_22>
+  251 445</Corner_22>
+<Corner_23>
+  253 453</Corner_23>
+<Corner_24>
+  225 402</Corner_24>
+<Corner_25>
+  226 407</Corner_25>
+<Corner_26>
+  226 414</Corner_26>
+<Corner_27>
+  227 422</Corner_27>
+<Corner_28>
+  228 430</Corner_28>
+<Corner_29>
+  230 437</Corner_29>
+<Corner_30>
+  231 446</Corner_30>
+<Corner_31>
+  232 454</Corner_31>
+<Corner_32>
+  209 403</Corner_32>
+<Corner_33>
+  210 409</Corner_33>
+<Corner_34>
+  210 415</Corner_34>
+<Corner_35>
+  210 423</Corner_35>
+<Corner_36>
+  211 430</Corner_36>
+<Corner_37>
+  211 438</Corner_37>
+<Corner_38>
+  211 447</Corner_38>
+<Corner_39>
+  212 456</Corner_39>
+<Corner_40>
+  193 405</Corner_40>
+<Corner_41>
+  193 410</Corner_41>
+<Corner_42>
+  192 415</Corner_42>
+<Corner_43>
+  193 423</Corner_43>
+<Corner_44>
+  192 430</Corner_44>
+<Corner_45>
+  191 438</Corner_45>
+<Corner_46>
+  192 449</Corner_46>
+<Corner_47>
+  192 458</Corner_47>
+>>>>>>> origin/master
 </opencv_storage>
