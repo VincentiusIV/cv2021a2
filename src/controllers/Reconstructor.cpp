@@ -123,9 +123,8 @@ void Reconstructor::initialize()
 				voxel->y = y;
 				voxel->z = z;
 				voxel->camera_projection = vector<Point>(m_cameras.size());
-				voxel->valid_camera_projection = vector<int>(m_cameras.size(), 0);
-				
-
+				voxel->valid_camera_projection = vector<int>(m_cameras.size(), 0);				
+				voxel->color = cv::Vec4f(1.0, 0.0, 0.0, 1.0);
 				const int p = zp * plane + yp * plane_x + xp;  // The voxel's index
 
 				for (size_t c = 0; c < m_cameras.size(); ++c)
@@ -138,6 +137,7 @@ void Reconstructor::initialize()
 					// If it's within the camera's FoV, flag the projection
 					if (point.x >= 0 && point.x < m_plane_size.width && point.y >= 0 && point.y < m_plane_size.height)
 						voxel->valid_camera_projection[(int) c] = 1;
+
 				}
 
 				//voxel->color = average of all pixel colors from 2D camera points.
@@ -168,11 +168,13 @@ void Reconstructor::update()
 		int camera_counter = 0;
 		Voxel* voxel = m_voxels[v];
 
+		double totalColor = 0.0, colorCount = 0;
 		for (size_t c = 0; c < m_cameras.size(); ++c)
 		{
 			if (voxel->valid_camera_projection[c])
 			{
 				const Point point = voxel->camera_projection[c];
+				cv::Mat frame = m_cameras[c]->getFrame();
 
 				//If there's a white pixel on the foreground image at the projection point, add the camera
 				if (m_cameras[c]->getForegroundImage().at<uchar>(point) == 255) ++camera_counter;

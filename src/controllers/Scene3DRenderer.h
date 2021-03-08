@@ -26,8 +26,14 @@ namespace nl_uu_science_gmt
 
 class Scene3DRenderer
 {
+	struct ColorModel
+	{
+
+	};
+
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
+	std::vector<ColorModel>& m_colormodels; // Color models for each camera, same indexing. 
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
 
@@ -95,9 +101,8 @@ public:
 	virtual ~Scene3DRenderer();
 
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
-
+	void createColorModels();
 	void processForeground(Camera*);
-	void CalculateNoise(cv::Mat& foreground, double& noise);
 	bool processFrame();
 	void setCamera(int);
 	void setTopView();

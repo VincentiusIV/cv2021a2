@@ -80,7 +80,6 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("H", VIDEO_WINDOW, &m_h_threshold, 255);
 	createTrackbar("S", VIDEO_WINDOW, &m_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &m_v_threshold, 255);
-	createTrackbar("Contours", VIDEO_WINDOW, &targetNumOfContours, 1000);
 	const int maxElement = 2, maxSize = 21;
 	createTrackbar("Pre Erode Element", VIDEO_WINDOW, &preErosionElement, maxElement);
 	createTrackbar("Pre Erode Size", VIDEO_WINDOW, &preErosionSize, maxSize);
@@ -89,17 +88,13 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("Dilation Element", VIDEO_WINDOW, &dilationElement, maxElement);
 	createTrackbar("Dilation Kernel Size", VIDEO_WINDOW, &dilationSize, maxSize);
 
-	// TODO: Automatic threshhold calculation
-	// Andrea
-	// Two suggestions: 
-	// 1.	Assume that a good segmentation has little noise(few isolated white pixels, few isolated black pixels).
-	// 		Implement a function that tries out values and optimizes the amount of noise. Be creative in how you approach this. Perhaps the functions erode and dilate can help.
-	// 2.	Make a manual segmentation of a frame into foregroundand background(e.g.in Paint).
-	//		Then implement a function that finds the optimal thresholds by comparing the algorithm’s output to the manual segmentation.The XOR function might be of use here.
-	
 	createFloorGrid();
 	setTopView();
 
+
+
+	// TODO: Cluster voxels, all voxels should have a label.
+	createColorModels();
 }
 
 /**
@@ -132,6 +127,12 @@ bool Scene3DRenderer::processFrame()
 		processForeground(m_cameras[c]);
 	}
 
+	// TODO: Online Phase
+
+	// Go over voxels belonginng to the same group.
+	// Make a histogram of colors of those.
+	// Compare distance between existing color models, pick closest one.
+
 	return true;
 }
 
@@ -151,6 +152,14 @@ void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_scie
 	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
 	threshold(tmp, background, vt, 255, CV_THRESH_BINARY);
 	bitwise_or(foreground, background, foreground);
+}
+
+void Scene3DRenderer::createColorModels()
+{
+	// Assumes visible voxels are already labeled.
+	// Go over all voxels, separate them into lists according to label.
+		// Ignore voxels below certain height to ignore trousers.
+	// Make color histogram for each group of voxels.
 }
 
 /**
@@ -220,15 +229,6 @@ void Scene3DRenderer::processForeground(Camera* camera)
 
 	// Find n draw contours
 
-	//Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
-	//for (size_t i = 0; i < contours.size(); i++)
-	//{
-	//	Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-	//	drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
-	//}    
-	//imshow("Contours", drawing);
-	// Post process the foreground image
-
 	// Apply erosion/dilation. Either can be turned off by setting element to 0.
 	int erosionType = (erosionElement == 0) ? MORPH_RECT : ((erosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
 	Mat erodeKernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
@@ -241,48 +241,6 @@ void Scene3DRenderer::processForeground(Camera* camera)
 	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
 
 	camera->setForegroundImage(foreground);
-}
-
-void Scene3DRenderer::CalculateNoise(cv::Mat& foreground, double& noise)
-{
-	for (int y = 0; y < foreground.rows; y++)
-	{
-		for (int x = 0; x < foreground.cols; x++)
-		{
-			auto pixel = foreground.at<uchar>(y, x);
-
-			int equalNeighbourCount = 0;
-			// Go over neighbours of current pixel.
-			for (int i = -1; i < 2; i++)
-			{
-				for (int j = -1; j < 2; j++)
-				{
-					if (i == 0 && j == 0)
-						continue;
-					int xi = x + i;
-					int yj = y + j;
-					if (xi < 0 || xi >= foreground.cols)
-						continue;
-					if (yj < 0 || yj >= foreground.rows)
-						continue;
-					auto neighbour = foreground.at<uchar>(yj, xi);
-					if (pixel == neighbour)
-						++equalNeighbourCount;
-				}
-			}
-
-			if (equalNeighbourCount < 5)
-			{
-				double pixelNoise = 1.0 - (double)equalNeighbourCount / 8.0;
-				// If pixel is black, count it doubly.
-				if (pixel == 0)
-				{
-					pixelNoise = pixelNoise * 2;
-				}
-				noise += pixelNoise;
-			}
-		}
-	}
 }
 
 /**

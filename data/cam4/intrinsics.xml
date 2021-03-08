@@ -9,25 +9,12 @@
     0. 4.90907013e+02 2.45466721e+02 
     0. 0. 1.
   </data>
-<<<<<<< HEAD
-  </CameraMatrix>
-=======
 </CameraMatrix>
->>>>>>> origin/master
 <DistortionCoeffs type_id="opencv-matrix">
   <rows>5</rows>
   <cols>1</cols>
   <dt>f</dt>
   <data>
-<<<<<<< HEAD
-  -3.8359341025352478e-01
-  2.4172563850879669e-01
-  -6.5510004060342908e-04
-  -1.0821459582075477e-03
-  -1.0587930679321289e-01
-  </data>
-  </DistortionCoeffs>
-=======
     -3.8359341025352478e-01
     2.4172563850879669e-01
     -6.5510004060342908e-04
@@ -35,5 +22,4 @@
     -1.0587930679321289e-01
   </data>
 </DistortionCoeffs>
->>>>>>> origin/master
 </opencv_storage>

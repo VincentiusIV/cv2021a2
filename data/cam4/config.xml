@@ -19,19 +19,11 @@
   <cols>1</cols>
   <dt>f</dt>
   <data>
-<<<<<<< HEAD
-    1.61944222e+00 5.81651032e-01 -4.87080246e-01</data></RotationValues>
-=======
     1.62435913e+00 5.74113727e-01 -4.83272702e-01</data></RotationValues>
->>>>>>> origin/master
 <TranslationValues type_id="opencv-matrix">
   <rows>3</rows>
   <cols>1</cols>
   <dt>f</dt>
   <data>
-<<<<<<< HEAD
-    -9.88457764e+02 8.73885437e+02 3.99320288e+03</data></TranslationValues>
-=======
     -9.91334717e+02 8.84845520e+02 4.00081592e+03</data></TranslationValues>
->>>>>>> origin/master
 </opencv_storage>

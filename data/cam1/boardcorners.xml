@@ -2,45 +2,6 @@
 <opencv_storage>
 <CornersAmount>48</CornersAmount>
 <Corner_0>
-<<<<<<< HEAD
-  357 301</Corner_0>
-<Corner_1>
-  368 305</Corner_1>
-<Corner_2>
-  376 306</Corner_2>
-<Corner_3>
-  387 309</Corner_3>
-<Corner_4>
-  396 312</Corner_4>
-<Corner_5>
-  407 314</Corner_5>
-<Corner_6>
-  417 317</Corner_6>
-<Corner_7>
-  429 320</Corner_7>
-<Corner_8>
-  349 305</Corner_8>
-<Corner_9>
-  359 307</Corner_9>
-<Corner_10>
-  368 310</Corner_10>
-<Corner_11>
-  378 312</Corner_11>
-<Corner_12>
-  389 316</Corner_12>
-<Corner_13>
-  399 319</Corner_13>
-<Corner_14>
-  409 321</Corner_14>
-<Corner_15>
-  420 324</Corner_15>
-<Corner_16>
-  340 307</Corner_16>
-<Corner_17>
-  350 310</Corner_17>
-<Corner_18>
-  359 312</Corner_18>
-=======
   356 302</Corner_0>
 <Corner_1>
   367 304</Corner_1>
@@ -78,73 +39,19 @@
   352 311</Corner_17>
 <Corner_18>
   361 314</Corner_18>
->>>>>>> origin/master
 <Corner_19>
   370 316</Corner_19>
 <Corner_20>
   380 319</Corner_20>
 <Corner_21>
-<<<<<<< HEAD
-  392 323</Corner_21>
-<Corner_22>
-  401 324</Corner_22>
-=======
   391 322</Corner_21>
 <Corner_22>
   403 325</Corner_22>
->>>>>>> origin/master
 <Corner_23>
   413 328</Corner_23>
 <Corner_24>
   332 310</Corner_24>
 <Corner_25>
-<<<<<<< HEAD
-  341 313</Corner_25>
-<Corner_26>
-  351 316</Corner_26>
-<Corner_27>
-  360 319</Corner_27>
-<Corner_28>
-  373 322</Corner_28>
-<Corner_29>
-  382 326</Corner_29>
-<Corner_30>
-  393 329</Corner_30>
-<Corner_31>
-  405 331</Corner_31>
-<Corner_32>
-  322 313</Corner_32>
-<Corner_33>
-  332 317</Corner_33>
-<Corner_34>
-  341 319</Corner_34>
-<Corner_35>
-  352 323</Corner_35>
-<Corner_36>
-  363 325</Corner_36>
-<Corner_37>
-  372 329</Corner_37>
-<Corner_38>
-  384 333</Corner_38>
-<Corner_39>
-  397 336</Corner_39>
-<Corner_40>
-  312 317</Corner_40>
-<Corner_41>
-  322 319</Corner_41>
-<Corner_42>
-  331 323</Corner_42>
-<Corner_43>
-  342 325</Corner_43>
-<Corner_44>
-  352 329</Corner_44>
-<Corner_45>
-  364 333</Corner_45>
-<Corner_46>
-  375 336</Corner_46>
-<Corner_47>
-  386 340</Corner_47>
-=======
   340 314</Corner_25>
 <Corner_26>
   351 318</Corner_26>
@@ -190,5 +97,4 @@
   377 337</Corner_46>
 <Corner_47>
   386 341</Corner_47>
->>>>>>> origin/master
 </opencv_storage>
