@@ -32,7 +32,8 @@ Scene3DRenderer::Scene3DRenderer(
 				m_reconstructor(r),
 				m_cameras(cs),
 				m_num(4),
-				m_sphere_radius(1850)
+				m_sphere_radius(1850),
+				m_colormodels(std::vector<ColorModel>())
 {
 	m_width = 640;
 	m_height = 480;
@@ -66,9 +67,9 @@ Scene3DRenderer::Scene3DRenderer(
 	m_current_frame = 0;
 	m_previous_frame = -1;
 
-	const int H = 0;
-	const int S = 0;
-	const int V = 0;
+	const int H = 10;
+	const int S = 10;
+	const int V = 100;
 	m_h_threshold = H;
 	m_ph_threshold = H;
 	m_s_threshold = S;
@@ -177,7 +178,7 @@ void Scene3DRenderer::processForeground(Camera* camera)
 
 	// Background subtraction H
 	static float prevNoise = 1000000000000000;
-	const int MAX_ITER = 1;
+	const int MAX_ITER = 0;
 	static RNG rng;
 	bool foundBetter = false;
 	for (int i = 0; i < MAX_ITER; i++)
