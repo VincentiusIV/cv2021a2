@@ -93,7 +93,6 @@ Scene3DRenderer::Scene3DRenderer(
 	createFloorGrid();
 	setTopView();
 
-
 	m_calibrationFrames.push_back(std::vector<int>());
 	m_calibrationFrames.push_back(std::vector<int>());
 	m_calibrationFrames.push_back(std::vector<int>());
@@ -112,7 +111,7 @@ Scene3DRenderer::Scene3DRenderer(
 			int frameIdx = m_calibrationFrames[i][j];
 			for (size_t ci = 0; ci < m_cameras.size(); ci++)
 			{
-				m_cameras[ci]->setVideoFrame(frameIdx);
+				m_cameras[ci]->getVideoFrame(m_current_frame);
 				processForeground(m_cameras[ci]);
 			}
 			// Compute the voxels for that frame.
@@ -120,18 +119,22 @@ Scene3DRenderer::Scene3DRenderer(
 
 			// TODO: k-means, then label each voxel to a center.
 			std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
+			std::vector<cv::Vec3i> coords = std::vector<cv::Vec3i>();
+			std::vector<cv::Vec3i> centers = std::vector<cv::Vec3i>();
 			for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
 			{
 				Reconstructor::Voxel* voxel = visibleVoxels[vi];
-				
+				coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0)); // ignore z-axis
 			}		
+			//kmeans(coords, );
 
+			// go over all visible voxels, assign center index as label.
+			
 			// TODO: create color models.
 
 		}
 	}
-	createColorModels();
-	
+	createColorModels();	
 }
 
 /**

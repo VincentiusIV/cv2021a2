@@ -76,18 +76,21 @@ void Reconstructor::initialize()
 	const int plane_x = (xR - xL) / m_step;
 	const int plane = plane_y * plane_x;
 
+	const int xOffset = -1000;
+	const int yOffset = 1000;
+
 	// Save the 8 volume corners
 	// bottom
-	m_corners.push_back(new Point3f((float) xL, (float) yL, (float) zL));
-	m_corners.push_back(new Point3f((float) xL, (float) yR, (float) zL));
-	m_corners.push_back(new Point3f((float) xR, (float) yR, (float) zL));
-	m_corners.push_back(new Point3f((float) xR, (float) yL, (float) zL));
+	m_corners.push_back(new Point3f((float) xL + xOffset, (float) yL + yOffset, (float) zL));
+	m_corners.push_back(new Point3f((float) xL + xOffset, (float) yR + yOffset, (float) zL));
+	m_corners.push_back(new Point3f((float) xR + xOffset, (float) yR + yOffset, (float) zL));
+	m_corners.push_back(new Point3f((float) xR + xOffset, (float) yL + yOffset, (float) zL));
 
 	// top
-	m_corners.push_back(new Point3f((float) xL, (float) yL, (float) zR));
-	m_corners.push_back(new Point3f((float) xL, (float) yR, (float) zR));
-	m_corners.push_back(new Point3f((float) xR, (float) yR, (float) zR));
-	m_corners.push_back(new Point3f((float) xR, (float) yL, (float) zR));
+	m_corners.push_back(new Point3f((float) xL + xOffset, (float) yL + yOffset, (float) zR));
+	m_corners.push_back(new Point3f((float) xL + xOffset, (float) yR + yOffset, (float) zR));
+	m_corners.push_back(new Point3f((float) xR + xOffset, (float) yR + yOffset, (float) zR));
+	m_corners.push_back(new Point3f((float) xR + xOffset, (float) yL + yOffset, (float) zR));
 
 	// Acquire some memory for efficiency
 	cout << "Initializing " << m_voxels_amount << " voxels ";
@@ -119,8 +122,8 @@ void Reconstructor::initialize()
 
 				// Create all voxels
 				Voxel* voxel = new Voxel;
-				voxel->x = x;
-				voxel->y = y;
+				voxel->x = x + xOffset;
+				voxel->y = y + yOffset;
 				voxel->z = z;
 				voxel->camera_projection = vector<Point>(m_cameras.size());
 				voxel->valid_camera_projection = vector<int>(m_cameras.size(), 0);				
@@ -129,7 +132,7 @@ void Reconstructor::initialize()
 
 				for (size_t c = 0; c < m_cameras.size(); ++c)
 				{
-					Point point = m_cameras[c]->projectOnView(Point3f((float) x, (float) y, (float) z));
+					Point point = m_cameras[c]->projectOnView(Point3f((float)voxel->x, (float)voxel->y, (float)voxel->z));
 
 					// Save the pixel coordinates 'point' of the voxel projection on camera 'c'
 					voxel->camera_projection[(int) c] = point;
