@@ -34,6 +34,7 @@ class Scene3DRenderer
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
 	std::vector<ColorModel> &m_colormodels; // Color models for each camera, same indexing. 
+	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
 

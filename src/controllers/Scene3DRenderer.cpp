@@ -33,7 +33,8 @@ Scene3DRenderer::Scene3DRenderer(
 				m_cameras(cs),
 				m_num(4),
 				m_sphere_radius(1850),
-				m_colormodels(std::vector<ColorModel>())
+				m_colormodels(std::vector<ColorModel>()),
+				m_calibrationFrames(std::vector<std::vector<int>>())
 {
 	m_width = 640;
 	m_height = 480;
@@ -67,9 +68,9 @@ Scene3DRenderer::Scene3DRenderer(
 	m_current_frame = 0;
 	m_previous_frame = -1;
 
-	const int H = 10;
+	const int H = 6;
 	const int S = 10;
-	const int V = 100;
+	const int V = 48;
 	m_h_threshold = H;
 	m_ph_threshold = H;
 	m_s_threshold = S;
@@ -93,9 +94,44 @@ Scene3DRenderer::Scene3DRenderer(
 	setTopView();
 
 
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
 
+	m_calibrationFrames[0].push_back(10);
+	m_calibrationFrames[1].push_back(30);
+	m_calibrationFrames[2].push_back(50);
+	m_calibrationFrames[3].push_back(10);
 	// TODO: Cluster voxels, all voxels should have a label.
+	for (size_t i = 0; i < m_cameras.size(); i++)
+	{
+		for (size_t j = 0; j < m_calibrationFrames[i].size(); j++)
+		{
+			// Set all cameras to the calibration frame.
+			int frameIdx = m_calibrationFrames[i][j];
+			for (size_t ci = 0; ci < m_cameras.size(); ci++)
+			{
+				m_cameras[ci]->setVideoFrame(frameIdx);
+				processForeground(m_cameras[ci]);
+			}
+			// Compute the voxels for that frame.
+			m_reconstructor.update();
+
+			// TODO: k-means, then label each voxel to a center.
+			std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
+			for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
+			{
+				Reconstructor::Voxel* voxel = visibleVoxels[vi];
+				
+			}		
+
+			// TODO: create color models.
+
+		}
+	}
 	createColorModels();
+	
 }
 
 /**
