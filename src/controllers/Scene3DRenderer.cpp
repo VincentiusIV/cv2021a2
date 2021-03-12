@@ -13,6 +13,7 @@
 #include <opencv2/imgproc/types_c.h>
 #include <stddef.h>
 #include <string>
+#include <iostream>
 
 #include "../utilities/General.h"
 
@@ -31,7 +32,9 @@ Scene3DRenderer::Scene3DRenderer(
 				m_reconstructor(r),
 				m_cameras(cs),
 				m_num(4),
-				m_sphere_radius(1850)
+				m_sphere_radius(1850),
+				m_colormodels(std::vector<ColorModel>()),
+				m_calibrationFrames(std::vector<std::vector<int>>())
 {
 	m_width = 640;
 	m_height = 480;
@@ -65,9 +68,9 @@ Scene3DRenderer::Scene3DRenderer(
 	m_current_frame = 0;
 	m_previous_frame = -1;
 
-	const int H = 0;
-	const int S = 0;
-	const int V = 0;
+	const int H = 6;
+	const int S = 10;
+	const int V = 48;
 	m_h_threshold = H;
 	m_ph_threshold = H;
 	m_s_threshold = S;
@@ -79,9 +82,92 @@ Scene3DRenderer::Scene3DRenderer(
 	createTrackbar("H", VIDEO_WINDOW, &m_h_threshold, 255);
 	createTrackbar("S", VIDEO_WINDOW, &m_s_threshold, 255);
 	createTrackbar("V", VIDEO_WINDOW, &m_v_threshold, 255);
+	const int maxElement = 2, maxSize = 21;
+	createTrackbar("Pre Erode Element", VIDEO_WINDOW, &preErosionElement, maxElement);
+	createTrackbar("Pre Erode Size", VIDEO_WINDOW, &preErosionSize, maxSize);
+	createTrackbar("Erosion Element", VIDEO_WINDOW, &erosionElement, maxElement);
+	createTrackbar("Erosion Kernel Size", VIDEO_WINDOW, &erosionSize, maxSize);
+	createTrackbar("Dilation Element", VIDEO_WINDOW, &dilationElement, maxElement);
+	createTrackbar("Dilation Kernel Size", VIDEO_WINDOW, &dilationSize, maxSize);
 
 	createFloorGrid();
 	setTopView();
+
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
+	m_calibrationFrames.push_back(std::vector<int>());
+
+	m_calibrationFrames[0].push_back(10);
+	m_calibrationFrames[1].push_back(30);
+	m_calibrationFrames[2].push_back(1580);
+	m_calibrationFrames[3].push_back(10);
+	// TODO: Cluster voxels, all voxels should have a label.
+	for (size_t i = 0; i < m_cameras.size(); i++)
+	{
+		for (size_t j = 0; j < m_calibrationFrames[i].size(); j++)
+		{
+			// Set all cameras to the calibration frame.
+			int frameIdx = m_calibrationFrames[i][j];
+			for (size_t ci = 0; ci < m_cameras.size(); ci++)
+			{
+				m_cameras[ci]->getVideoFrame(frameIdx);
+				processForeground(m_cameras[ci]);
+			}
+			// Compute the voxels for that frame.
+			m_reconstructor.update();
+
+			// TODO: k-means, then label each voxel to a center.
+			std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
+			std::vector<cv::Vec3i> coords = std::vector<cv::Vec3i>();
+
+			cv::Mat matrix_coords = Mat::zeros(visibleVoxels.size(), 2, CV_32F);
+
+			std::vector<cv::Vec3i> centers = std::vector<cv::Vec3i>();
+
+			std::cout << "Size visible voxels" << visibleVoxels.size() << std::endl; 
+			for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
+			{
+				Reconstructor::Voxel* voxel = visibleVoxels[vi];
+				coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0)); // ignore z-axis
+
+				//Matrix needed for kmeans clustering
+				matrix_coords.at<float>(vi, 0) = coords.back()[0];	
+				matrix_coords.at<float>(vi, 1) = coords.back()[1];
+				
+			}	
+
+
+			int clusterCount = 4;
+			Mat labels;
+			int attempts = 20; //First tried with 5, but for frame 10 this resulted in very different cluster centers
+			Mat centers_clusters;
+			//https://docs.opencv.org/master/d5/d38/group__core__cluster.html
+			cv::kmeans(matrix_coords, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_RANDOM_CENTERS, centers_clusters);
+
+			double dist1 = norm(centers_clusters.row(0), centers_clusters.row(1), NORM_L2);
+			double dist2 = norm(centers_clusters.row(0), centers_clusters.row(2), NORM_L2);
+			double dist3 = norm(centers_clusters.row(0), centers_clusters.row(3), NORM_L2);
+			double dist4 = norm(centers_clusters.row(1), centers_clusters.row(2), NORM_L2);
+			double dist5 = norm(centers_clusters.row(1), centers_clusters.row(3), NORM_L2);
+			double dist6 = norm(centers_clusters.row(2), centers_clusters.row(3), NORM_L2);
+			
+			std::cout << "Point labels" << labels.row(0) << std::endl;
+			std::cout << "Cluster centers 1" << centers_clusters.row(0) << std::endl;
+			std::cout << "Cluster centers 2" << centers_clusters.row(1) << std::endl;
+			std::cout << "Cluster centers 3" << centers_clusters.row(2) << std::endl;
+			std::cout << "Cluster centers 4" << centers_clusters.row(3) << std::endl;
+			std::cout << "Distance between cluster centers" << dist1 << " "<<
+				dist2 << " " << dist3 << " "  << dist4 << " " << dist5 << 
+				" " << dist6 <<
+				std::endl;
+			// go over all visible voxels, assign center index as label.
+			
+			// TODO: create color models.
+
+		}
+	}
+	createColorModels();	
 }
 
 /**
@@ -113,15 +199,47 @@ bool Scene3DRenderer::processFrame()
 		assert(m_cameras[c] != NULL);
 		processForeground(m_cameras[c]);
 	}
+
+	// TODO: Online Phase
+
+	// Go over voxels belonginng to the same group.
+	// Make a histogram of colors of those.
+	// Compare distance between existing color models, pick closest one.
+
 	return true;
+}
+
+void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt)
+{
+	Mat tmp, background;
+
+	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
+	threshold(tmp, foreground, ht, 255, CV_THRESH_BINARY);
+
+	// Background subtraction S
+	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
+	threshold(tmp, background, st, 255, CV_THRESH_BINARY);
+	bitwise_and(foreground, background, foreground);
+
+	// Background subtraction V
+	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
+	threshold(tmp, background, vt, 255, CV_THRESH_BINARY);
+	bitwise_or(foreground, background, foreground);
+}
+
+void Scene3DRenderer::createColorModels()
+{
+	// Assumes visible voxels are already labeled.
+	// Go over all voxels, separate them into lists according to label.
+		// Ignore voxels below certain height to ignore trousers.
+	// Make color histogram for each group of voxels.
 }
 
 /**
  * Separate the background from the foreground
  * ie.: Create an 8 bit image where only the foreground of the scene is white (255)
  */
-void Scene3DRenderer::processForeground(
-		Camera* camera)
+void Scene3DRenderer::processForeground(Camera* camera)
 {
 	assert(!camera->getFrame().empty());
 	Mat hsv_image;
@@ -131,21 +249,69 @@ void Scene3DRenderer::processForeground(
 	split(hsv_image, channels);  // Split the HSV-channels for further analysis
 
 	// Background subtraction H
-	Mat tmp, foreground, background;
-	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
-	threshold(tmp, foreground, m_h_threshold, 255, CV_THRESH_BINARY);
+	static float prevNoise = 1000000000000000;
+	const int MAX_ITER = 0;
+	static RNG rng;
+	bool foundBetter = false;
+	for (int i = 0; i < MAX_ITER; i++)
+	{
+		Mat foreground;
+		// 1. set hsv thresholds to random values...
+		// - hue & saturation thresholds greater than 100 tend to remove more detail from the foreground than remove noise.
+		//   its fine to keep some noise outside the silhoutte since we can easily remove this with erosion afterwards.
+		// - value thresholds greater than 100 (in combination with medium/high hue/saturation threshhold) 
+		//   have a good chance at wiping the entire image, clearly undesirable.
+		int ht = rng.uniform(0, 80), st = rng.uniform(0, 80), vt = rng.uniform(0, 80);
+		// 2. try out random thresholds.
+		ApplyThresholds(channels, camera, foreground, ht, st, vt);
+		// 3. check , see if its lower than noise current hsv thresholds
+		double noise = 0.0;
+		// CalculateNoise(foreground, noise); // Not a great estimator for voxel reconstruction, see report.
+		// Instead, calculate noise based on the amount of contours
 
-	// Background subtraction S
-	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
-	threshold(tmp, background, m_s_threshold, 255, CV_THRESH_BINARY);
-	bitwise_and(foreground, background, foreground);
+		// 4. Erode temporarily to remove most noise outside silhoutte and exaggerate noise inside.
+		int erosionType = (preErosionElement == 0) ? MORPH_RECT : ((preErosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+		Mat kernel = getStructuringElement(erosionType, Size(2 * preErosionSize + 1, 2 * preErosionSize + 1), Point(preErosionSize, preErosionSize));
+		erode(foreground, foreground, kernel);
+		// 5. Find contours.
+		vector<vector<Point> > contours;
+		vector<Vec4i> hierarchy;
+		findContours(foreground, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+		noise = contours.size();
+		// 6. If lower noise, use it.
+		if (noise < prevNoise)
+		{
+			prevNoise = noise;
+			m_h_threshold = ht;
+			m_s_threshold = st;
+			m_v_threshold = vt;
+			cout << "Found better thresholds h:" << m_h_threshold << ",s:" << m_s_threshold << ",v:" << m_v_threshold << endl;
+			foundBetter = true;
+			Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
+			for (size_t i = 0; i < contours.size(); i++)
+			{
+				Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+				drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
+			}    
+			imshow("Contours", drawing);
+		}
+	}
 
-	// Background subtraction V
-	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
-	threshold(tmp, background, m_v_threshold, 255, CV_THRESH_BINARY);
-	bitwise_or(foreground, background, foreground);
+	Mat foreground;
+	ApplyThresholds(channels, camera, foreground, m_h_threshold, m_s_threshold, m_v_threshold);
 
-	// Improve the foreground image
+	// Find n draw contours
+
+	// Apply erosion/dilation. Either can be turned off by setting element to 0.
+	int erosionType = (erosionElement == 0) ? MORPH_RECT : ((erosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat erodeKernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
+	erode(foreground, foreground, erodeKernel);
+
+	int dilationType = (dilationElement == 0) ? MORPH_RECT : ((dilationElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat dilateKernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
+	dilate(foreground, foreground, dilateKernel);
+
+	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
 
 	camera->setForegroundImage(foreground);
 }

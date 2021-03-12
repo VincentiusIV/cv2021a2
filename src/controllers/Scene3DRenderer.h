@@ -26,8 +26,15 @@ namespace nl_uu_science_gmt
 
 class Scene3DRenderer
 {
+	struct ColorModel
+	{
+
+	};
+
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
+	std::vector<ColorModel> &m_colormodels; // Color models for each camera, same indexing. 
+	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
 
@@ -72,6 +79,15 @@ class Scene3DRenderer
 	int m_v_threshold;                        // Value threshold number for background subtraction
 	int m_pv_threshold;                       // Value threshold value at previous iteration (update awareness)
 
+	int targetNumOfContours = 1;		      // Target number of contours that should appear in the image.
+
+	int preErosionElement = 2;				// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int preErosionSize = 1;					// Erosion kernel size.
+	int erosionElement = 0;					// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int erosionSize = 0;					// Erosion kernel size.
+	int dilationElement;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int dilationSize;					      // Dilation kernel size.
+
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
 
@@ -82,16 +98,14 @@ class Scene3DRenderer
 #endif
 
 public:
-	Scene3DRenderer(
-			Reconstructor &, const std::vector<Camera*> &);
+	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
 
-	void processForeground(
-			Camera*);
-
+	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
+	void createColorModels();
+	void processForeground(Camera*);
 	bool processFrame();
-	void setCamera(
-			int);
+	void setCamera(int);
 	void setTopView();
 
 	const std::vector<Camera*>& getCameras() const
