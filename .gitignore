@@ -38,3 +38,10 @@
 # builds
 build/*
 out/*
+
+*.tlog
+*.ilk
+*.log
+*.pdb
+*.idb
+x64/*
