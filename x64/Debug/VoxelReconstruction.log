@@ -1,19 +1,5 @@
-﻿  arcball.cpp
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(58,28): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(67,36): warning C4244: '=': conversion from 'double' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(94,21): warning C4244: 'argument': conversion from 'GLint' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(96,12): warning C4244: 'argument': conversion from 'GLint' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(188,10): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(208,12): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(259,17): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(286,16): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-C:\Fast Local Git Repos\cv2021a2\src\controllers\arcball.cpp(287,16): warning C4244: 'initializing': conversion from 'double' to 'GLfloat', possible loss of data
-  Camera.cpp
-  Glut.cpp
-  Reconstructor.cpp
-  Scene3DRenderer.cpp
-  main.cpp
-  General.cpp
-  VoxelReconstruction.cpp
-  Generating Code...
+﻿  Scene3DRenderer.cpp
+C:\Fast Local Git Repos\cv2021a2\src\controllers\Scene3DRenderer.cpp(170,43): warning C4305: 'initializing': truncation from '__int64' to 'float'
+C:\Fast Local Git Repos\cv2021a2\src\controllers\Scene3DRenderer.cpp(198,24): warning C4244: '=': conversion from 'unsigned __int64' to 'double', possible loss of data
+C:\Fast Local Git Repos\cv2021a2\src\controllers\Scene3DRenderer.cpp(202,16): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
   VoxelReconstruction.vcxproj -> C:\Fast Local Git Repos\cv2021a2\x64\Debug\VoxelReconstruction.exe
