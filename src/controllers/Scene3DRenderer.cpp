@@ -33,7 +33,7 @@ Scene3DRenderer::Scene3DRenderer(
 				m_cameras(cs),
 				m_num(4),
 				m_sphere_radius(1850),
-				m_colormodels(std::vector<ColorModel>()),
+				m_colormodels(std::vector<ColorModel*>()),
 				m_calibrationFrames(std::vector<std::vector<int>>())
 {
 	m_width = 640;
@@ -93,25 +93,31 @@ Scene3DRenderer::Scene3DRenderer(
 	createFloorGrid();
 	setTopView();
 
-	m_calibrationFrames.push_back(std::vector<int>());
-	m_calibrationFrames.push_back(std::vector<int>());
-	m_calibrationFrames.push_back(std::vector<int>());
-	m_calibrationFrames.push_back(std::vector<int>());
+	const int clusterCount = 4, attempts = 20;
+
+	for (size_t i = 0; i < m_cameras.size(); i++)
+		m_calibrationFrames.push_back(std::vector<int>());
+	for (size_t i = 0; i < m_cameras.size(); i++)
+	{
+		m_colormodels.push_back(new ColorModel());
+	}
 
 	m_calibrationFrames[0].push_back(10);
 	m_calibrationFrames[1].push_back(30);
-	m_calibrationFrames[2].push_back(50);
+	m_calibrationFrames[2].push_back(1580);
 	m_calibrationFrames[3].push_back(10);
-	// TODO: Cluster voxels, all voxels should have a label.
-	for (size_t i = 0; i < m_cameras.size(); i++)
-	{
-		for (size_t j = 0; j < m_calibrationFrames[i].size(); j++)
+
+	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
+	{			
+
+		// Go over calibration frames Note: Currently only supports 1 frame.
+		for (size_t j = 0; j < m_calibrationFrames[camIdx].size(); j++)
 		{
 			// Set all cameras to the calibration frame.
-			int frameIdx = m_calibrationFrames[i][j];
+			int frameIdx = m_calibrationFrames[camIdx][j];
 			for (size_t ci = 0; ci < m_cameras.size(); ci++)
 			{
-				m_cameras[ci]->getVideoFrame(m_current_frame);
+				m_cameras[ci]->getVideoFrame(frameIdx);
 				processForeground(m_cameras[ci]);
 			}
 			// Compute the voxels for that frame.
@@ -120,18 +126,104 @@ Scene3DRenderer::Scene3DRenderer(
 			// TODO: k-means, then label each voxel to a center.
 			std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
 			std::vector<cv::Vec3i> coords = std::vector<cv::Vec3i>();
+			cv::Mat matrix_coords = Mat::zeros(visibleVoxels.size(), 2, CV_32F);
 			std::vector<cv::Vec3i> centers = std::vector<cv::Vec3i>();
+
+			std::cout << "Size visible voxels" << visibleVoxels.size() << std::endl; 
 			for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
 			{
 				Reconstructor::Voxel* voxel = visibleVoxels[vi];
 				coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0)); // ignore z-axis
-			}		
-			//kmeans(coords, );
 
-			// go over all visible voxels, assign center index as label.
+				//Matrix needed for kmeans clustering
+				matrix_coords.at<float>(vi, 0) = coords.back()[0];	
+				matrix_coords.at<float>(vi, 1) = coords.back()[1];
+			}	
+
+			Mat labels, centers_clusters;
+			cv::kmeans(matrix_coords, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_RANDOM_CENTERS, centers_clusters);
+
+			double dist1 = norm(centers_clusters.row(0), centers_clusters.row(1), NORM_L2);
+			double dist2 = norm(centers_clusters.row(0), centers_clusters.row(2), NORM_L2);
+			double dist3 = norm(centers_clusters.row(0), centers_clusters.row(3), NORM_L2);
+			double dist4 = norm(centers_clusters.row(1), centers_clusters.row(2), NORM_L2);
+			double dist5 = norm(centers_clusters.row(1), centers_clusters.row(3), NORM_L2);
+			double dist6 = norm(centers_clusters.row(2), centers_clusters.row(3), NORM_L2);
 			
-			// TODO: create color models.
+			std::cout << "Point labels" << labels.row(0) << std::endl;
+			std::cout << "Cluster centers 1" << centers_clusters.row(0) << std::endl;
+			std::cout << "Cluster centers 2" << centers_clusters.row(1) << std::endl;
+			std::cout << "Cluster centers 3" << centers_clusters.row(2) << std::endl;
+			std::cout << "Cluster centers 4" << centers_clusters.row(3) << std::endl;
+			std::cout << "Distance between cluster centers" << dist1 << " "<<
+				dist2 << " " << dist3 << " "  << dist4 << " " << dist5 << 
+				" " << dist6 <<
+				std::endl;
+			// Create new empty color model for current camera.
+			Mat frame = m_cameras[camIdx]->getFrame();
+			for (size_t i = 0; i < clusterCount; i++)
+			{
+				int rows = frame.size().height, cols = frame.size().width;
+				ColorMatching* newMatching = new ColorMatching(rows, cols, frame.type());
+				m_colormodels[camIdx]->colorMatchings.push_back(newMatching);
+			}
 
+			// Put all colors of voxels that are visible from m_cameras[camIdx] into color matching bins.
+			for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
+			{
+				Reconstructor::Voxel* voxel = visibleVoxels[vi];
+				// If voxel is visible on the current camera, find which label it belongs to.
+				if (voxel->valid_camera_projection[camIdx])
+				{
+					int clusterIndex = labels.at<int>(vi, 0);
+					Vec3b pixelColor = voxel->pixel_colors[camIdx];
+					ColorMatching* colorMatching = m_colormodels[camIdx]->colorMatchings[clusterIndex];
+					colorMatching->frame.at<Vec3b>(voxel->camera_projection[camIdx]) = pixelColor;
+				}
+			}
+
+			/*for (size_t i = 0; i < clusterCount; i++)
+			{
+				imshow(camIdx + "Color Matching " + i, m_colormodels[camIdx]->colorMatchings[i]->frame);
+			}*/
+		}
+
+		// Calculate histograms for the color model of the current camera.
+		int histSize = 256;
+		float range[] = { 0, 256 }; //the upper boundary is exclusive
+		const float* histRange = { range };
+		bool uniform = true, accumulate = false;
+		vector<Mat> splitFrame = vector<Mat>();
+		for (size_t i = 0; i < clusterCount; i++)
+		{
+			Mat frame = m_colormodels[camIdx]->colorMatchings[i]->frame;
+			splitFrame.clear();
+			split(frame, splitFrame);
+			calcHist(&splitFrame[0], 1, 0, Mat(), m_colormodels[camIdx]->colorMatchings[i]->blueHistogram, 1, &histSize, &histRange, uniform, accumulate);
+			calcHist(&splitFrame[1], 1, 0, Mat(), m_colormodels[camIdx]->colorMatchings[i]->greenHistogram, 1, &histSize, &histRange, uniform, accumulate);
+			calcHist(&splitFrame[2], 1, 0, Mat(), m_colormodels[camIdx]->colorMatchings[i]->redHistogram, 1, &histSize, &histRange, uniform, accumulate);
+
+			// temp
+			Mat b_hist = m_colormodels[camIdx]->colorMatchings[i]->blueHistogram, g_hist = m_colormodels[camIdx]->colorMatchings[i]->greenHistogram, r_hist = m_colormodels[camIdx]->colorMatchings[i]->redHistogram;
+			int hist_w = 512, hist_h = 400;
+			int bin_w = cvRound((double)hist_w / histSize);
+			Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
+			normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+			normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+			normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+			for (int i = 1; i < histSize; i++)
+			{
+				line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(b_hist.at<float>(i - 1))),
+					Point(bin_w * (i), hist_h - cvRound(b_hist.at<float>(i))),
+					Scalar(255, 0, 0), 2, 8, 0);
+				line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(g_hist.at<float>(i - 1))),
+					Point(bin_w * (i), hist_h - cvRound(g_hist.at<float>(i))),
+					Scalar(0, 255, 0), 2, 8, 0);
+				line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(r_hist.at<float>(i - 1))),
+					Point(bin_w * (i), hist_h - cvRound(r_hist.at<float>(i))),
+					Scalar(0, 0, 255), 2, 8, 0);
+			}
+			imshow(camIdx + " histogram " + i, histImage);
 		}
 	}
 	createColorModels();	

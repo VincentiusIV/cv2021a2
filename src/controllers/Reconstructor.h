@@ -28,9 +28,10 @@ public:
 	{
 		int x, y, z;                               // Coordinates
 		int label;
-		cv::Vec4f color;						   // Color
+		cv::Vec4f color;						   // Color RGBA
 		std::vector<cv::Point> camera_projection;  // Projection location for camera[c]'s FoV (2D)
 		std::vector<int> valid_camera_projection;  // Flag if camera projection is in camera[c]'s FoV
+		std::vector<cv::Vec3b> pixel_colors;		   // Pixel color on frame at projection location.
 	};
 
 private:

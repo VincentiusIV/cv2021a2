@@ -126,6 +126,7 @@ void Reconstructor::initialize()
 				voxel->y = y + yOffset;
 				voxel->z = z;
 				voxel->camera_projection = vector<Point>(m_cameras.size());
+				voxel->pixel_colors = vector<Vec3b>(m_cameras.size());
 				voxel->valid_camera_projection = vector<int>(m_cameras.size(), 0);				
 				voxel->color = cv::Vec4f(1.0, 0.0, 0.0, 1.0);
 				const int p = zp * plane + yp * plane_x + xp;  // The voxel's index
@@ -170,18 +171,39 @@ void Reconstructor::update()
 	{
 		int camera_counter = 0;
 		Voxel* voxel = m_voxels[v];
+		for (size_t i = 0; i < voxel->pixel_colors.size(); i++)
+			voxel->pixel_colors[i] *= 0.0;
 
-		double totalColor = 0.0, colorCount = 0;
+		Vec3f avgColor(0.0);
+		float colorCount = 0;
 		for (size_t c = 0; c < m_cameras.size(); ++c)
 		{
 			if (voxel->valid_camera_projection[c])
 			{
 				const Point point = voxel->camera_projection[c];
-				cv::Mat frame = m_cameras[c]->getFrame();
 
 				//If there's a white pixel on the foreground image at the projection point, add the camera
-				if (m_cameras[c]->getForegroundImage().at<uchar>(point) == 255) ++camera_counter;
+				if (m_cameras[c]->getForegroundImage().at<uchar>(point) == 255)
+				{
+					++camera_counter;
+
+					cv::Mat frame = m_cameras[c]->getFrame();
+					++colorCount;
+					voxel->pixel_colors[c] = frame.at<Vec3b>(point);
+					avgColor += voxel->pixel_colors[c];
+				}
 			}
+		}
+
+		if (colorCount > 0)
+		{
+			avgColor /= colorCount;
+			avgColor *= 0.00390625; // divide by 256, multiplication is faster than division.
+			voxel->color = Vec4f(avgColor[2], avgColor[1], avgColor[0], 1);
+		}
+		else 
+		{
+			voxel->color = Vec4f(0.0, 0.0, 0.0, 1);
 		}
 
 		// If the voxel is present on all cameras
@@ -190,6 +212,7 @@ void Reconstructor::update()
 #pragma omp critical //push_back is critical
 			visible_voxels.push_back(voxel);
 		}
+		
 	}
 
 	m_visible_voxels.insert(m_visible_voxels.end(), visible_voxels.begin(), visible_voxels.end());

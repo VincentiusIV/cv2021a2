@@ -24,16 +24,41 @@
 namespace nl_uu_science_gmt
 {
 
+class ColorMatching
+{
+public:
+	ColorMatching(const int rows, const int cols, const int type)
+	{
+		frame = cv::Mat::zeros(rows, cols, type);
+	}
+
+	cv::Mat frame;
+	cv::Mat redHistogram, greenHistogram, blueHistogram;
+};
+
+class ColorModel
+{
+
+public:
+	ColorModel()
+	{
+		colorMatchings = std::vector<ColorMatching*>();
+	}
+	~ColorModel()
+	{
+		for (size_t i = 0; i < colorMatchings.size(); i++)
+			delete colorMatchings[i];
+	}
+
+	std::vector<ColorMatching*> colorMatchings; // size equal to num of clusters.
+
+};
+
 class Scene3DRenderer
 {
-	struct ColorModel
-	{
-
-	};
-
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
-	std::vector<ColorModel> &m_colormodels; // Color models for each camera, same indexing. 
+	std::vector<ColorModel*> &m_colormodels; // Color models for each camera, same indexing. 
 	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
