@@ -24,41 +24,40 @@
 namespace nl_uu_science_gmt
 {
 
-class ColorMatching
+// For one person on one camera.
+struct ColorMatching
 {
-public:
-	ColorMatching(const int rows, const int cols, const int type)
+	ColorMatching(int rows, int cols, int type)
 	{
 		frame = cv::Mat::zeros(rows, cols, type);
+		redHistogram = cv::Mat();
+		greenHistogram = cv::Mat();
+		blueHistogram = cv::Mat();
+		personIdx = 0;
 	}
 
+	int personIdx;
 	cv::Mat frame;
 	cv::Mat redHistogram, greenHistogram, blueHistogram;
 };
 
-class ColorModel
+struct ColorModel
 {
-
-public:
 	ColorModel()
 	{
 		colorMatchings = std::vector<ColorMatching*>();
 	}
-	~ColorModel()
-	{
-		for (size_t i = 0; i < colorMatchings.size(); i++)
-			delete colorMatchings[i];
-	}
 
 	std::vector<ColorMatching*> colorMatchings; // size equal to num of clusters.
-
 };
 
 class Scene3DRenderer
 {
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
-	std::vector<ColorModel*> &m_colormodels; // Color models for each camera, same indexing. 
+	std::vector<ColorModel*> m_colormodels_offline; // Color models for each camera, offline. 
+	std::vector<ColorModel*> m_colormodels_online; // Color models for each camera, online. 
+	
 	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
@@ -113,6 +112,13 @@ class Scene3DRenderer
 	int dilationElement;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
 	int dilationSize;					      // Dilation kernel size.
 
+	int m_minVoxelTrackHeight = 900;		// min height for voxels to track.
+	int m_maxVoxelTrackHeight = 10000;		// max height for voxels to track.
+
+	int m_clusterCount;
+	int m_kmeans_attempts;
+	std::vector<cv::Vec3i> centersCurrentFrame, centersLastFrame;
+
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
 
@@ -125,11 +131,14 @@ class Scene3DRenderer
 public:
 	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
-
+	void FindClusters(cv::Mat& labels, cv::Mat& centers, std::vector<cv::Vec3i>& coords);
+	void PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame);
+	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels, cv::Mat& labelLookup);
+	void UpdateHistograms(int histIdx, bool online);
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
-	void createColorModels();
 	void processForeground(Camera*);
 	bool processFrame();
+	void processTracking();
 	void setCamera(int);
 	void setTopView();
 
