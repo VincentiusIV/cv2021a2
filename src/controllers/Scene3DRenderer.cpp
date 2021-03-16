@@ -107,10 +107,10 @@ namespace nl_uu_science_gmt
 		m_colormodels_online.push_back(new ColorModel());
 	}
 
-	m_calibrationFrames[0].push_back(10);
-	m_calibrationFrames[1].push_back(30);
-	m_calibrationFrames[2].push_back(1580);
-	m_calibrationFrames[3].push_back(10);
+	m_calibrationFrames[0].push_back(70);
+	m_calibrationFrames[1].push_back(70);
+	m_calibrationFrames[2].push_back(1550);
+	m_calibrationFrames[3].push_back(520);
 
 	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
 	{
@@ -171,9 +171,9 @@ namespace nl_uu_science_gmt
 		for (int j = 0; j < cm->colorMatchings.size(); j++)
 		{
 			// Compare distance to other models, 
-			ColorMatching* cmm = cm->colorMatchings[j];
+			ColorMatching* colorMatch1 = cm->colorMatchings[j];
 			if (i == 0)
-				cmm->personIdx = j;
+				colorMatch1->personIdx = j;
 
 			for (size_t pi = 0; pi < m_clusterCount; pi++)
 			{
@@ -184,29 +184,29 @@ namespace nl_uu_science_gmt
 				ColorMatching* bestMatch = NULL;
 				for (size_t pj = 0; pj < othercm->colorMatchings.size(); pj++)
 				{
-					ColorMatching* cmmp = othercm->colorMatchings[pj];
+					ColorMatching* colorMatch2 = othercm->colorMatchings[pj];
 					Mat rdMat, gdMat, bdMat;
-					subtract(cmm->redHistogram, cmmp->redHistogram, rdMat);
-					subtract(cmm->blueHistogram, cmmp->blueHistogram, bdMat);
-					subtract(cmm->greenHistogram, cmmp->greenHistogram, gdMat);
-					rdMat = abs(rdMat);
+					//subtract(colorMatch1->redHistogram, colorMatch2->redHistogram, rdMat);
+					subtract(colorMatch1->blueHistogram, colorMatch2->blueHistogram, bdMat);
+					subtract(colorMatch1->greenHistogram, colorMatch2->greenHistogram, gdMat);
+					//rdMat = abs(rdMat);
 					bdMat = abs(bdMat);
 					gdMat = abs(gdMat);
 					double diff = sum(rdMat)[0] + sum(bdMat)[0] + sum(gdMat)[0]; 
 					if( diff < bestDiff)
 					{
 						bestDiff = diff;
-						bestMatch = cmmp;
+						bestMatch = colorMatch2;
 					}
 				}
 				assert(bestMatch != NULL);
-				bestMatch->personIdx = cmm->personIdx;
+				bestMatch->personIdx = colorMatch1->personIdx;
 			}
 		}
 	}
 
 	// Check if it worked.
-	
+	int imgIdx = 0;
 	for (size_t showIdx = 0; showIdx < m_clusterCount; showIdx++)
 	{
 		for (size_t i = 0; i < m_clusterCount; i++)
@@ -216,17 +216,17 @@ namespace nl_uu_science_gmt
 			{
 				if (cm->colorMatchings[j]->personIdx == showIdx)
 				{
-					//imshow(to_string(i) + " person" + to_string(showIdx), cm->colorMatchings[j]->frame);
-					break;
+					imshow(to_string(imgIdx++) + "-"+ to_string(i) + " person " + to_string(showIdx), cm->colorMatchings[j]->frame);
+					
 				}
 			}
 		}
 	}
 }
 
-void Scene3DRenderer::UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels, cv::Mat& labelLookup)
+void Scene3DRenderer::UpdateColorModelFrames(int camIdx, bool online, cv::Mat& labels)
 {
-	ColorModel* colorModel = online ? m_colormodels_online[histIdx] : m_colormodels_offline[histIdx];
+	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
 	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
 	{
 		colorModel->colorMatchings[i]->frame.setTo(Scalar(0,0,0));
@@ -236,27 +236,29 @@ void Scene3DRenderer::UpdateColorModelFrames(int histIdx, bool online, cv::Mat& 
 	{
 		Reconstructor::Voxel* voxel = m_reconstructor.getVisibleVoxels()[vi];
 		// If voxel is visible on the current camera, find which label it belongs to.
-		if (voxel->valid_camera_projection[histIdx])
+		if (voxel->valid_camera_projection[camIdx])
 		{
 			if (voxel->z < m_minVoxelTrackHeight || voxel->z > m_maxVoxelTrackHeight)
 				continue;
 
 			int labelIdx = labels.at<int>(vi, 0); // this refers to center idx, which != personIdx consistently.
 			// Get the color matching of label.
-			Vec3b pixelColor = voxel->pixel_colors[histIdx];
+			Vec3b pixelColor = voxel->pixel_colors[camIdx];
 			// Set the pixel color of the color matching frame.
-			colorModel->colorMatchings[labelIdx]->frame.at<Vec3b>(voxel->camera_projection[histIdx]) = pixelColor;
+			colorModel->colorMatchings[labelIdx]->frame.at<Vec3b>(voxel->camera_projection[camIdx]) = pixelColor;
 		}
 	}
 }
 
-void Scene3DRenderer::UpdateHistograms(int histIdx, bool online)
+void Scene3DRenderer::UpdateHistograms(int camIdx, bool online)
 {
-	ColorModel* colorModel = online ? m_colormodels_online[histIdx] : m_colormodels_offline[histIdx];
+	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
 	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
 	{
 		ColorMatching* colorMatching = colorModel->colorMatchings[i];
 		cv::Mat frame = colorMatching->frame;
+		cvtColor(frame, frame, CV_BGR2HSV);
+
 		std::vector<cv::Mat> splitFrame;
 		split(frame, splitFrame);
 		int histSize = 256;
@@ -344,34 +346,16 @@ bool Scene3DRenderer::processFrame()
 
 void Scene3DRenderer::processTracking()
 {
+	return;
 	// Find clusters
 	Mat labels, clusterCenters;
 	centersCurrentFrame.clear();
 	FindClusters(labels, clusterCenters, centersCurrentFrame);
-	// Matches cluster centers of this frame to last frame.
-	Mat labelLookup(m_clusterCount, 2, CV_8U);
-	for (size_t i = 0; i < centersCurrentFrame.size(); i++)
-	{
-		double closestDist = INFINITY;
-		int closestIdx = i;
-		for (size_t j = 0; j < centersLastFrame.size(); j++)
-		{
-			Vec3i diff = centersCurrentFrame[i] - centersLastFrame[j];
-			double dist = sqrtf(diff[0]*diff[0]+ diff[1] * diff[1]+ diff[2] * diff[2]);
-			if (dist < closestDist)
-			{
-				closestDist = dist;
-				closestIdx = j;
-			}
-		}
-		labelLookup.at<uchar>(i, 0) = i;
-		labelLookup.at<uchar>(i, 1) = closestIdx;
-	}
-
+	
 	// Update online color models.
 	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
 	{
- 		UpdateColorModelFrames(camIdx, true, labels, labelLookup);
+ 		UpdateColorModelFrames(camIdx, true, labels);
 		UpdateHistograms(camIdx, true);
 	}
 

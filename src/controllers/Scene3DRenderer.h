@@ -105,12 +105,12 @@ class Scene3DRenderer
 
 	int targetNumOfContours = 1;		      // Target number of contours that should appear in the image.
 
-	int preErosionElement = 2;				// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int preErosionElement = 2;				// 0=Rect, 1=Cross, 2=Ellipse.
 	int preErosionSize = 1;					// Erosion kernel size.
-	int erosionElement = 0;					// 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
-	int erosionSize = 0;					// Erosion kernel size.
-	int dilationElement;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
-	int dilationSize;					      // Dilation kernel size.
+	int erosionElement = 2;					// 0=Rect, 1=Cross, 2=Ellipse.
+	int erosionSize = 2;					// Erosion kernel size.
+	int dilationElement = 2;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int dilationSize = 2;					      // Dilation kernel size.
 
 	int m_minVoxelTrackHeight = 900;		// min height for voxels to track.
 	int m_maxVoxelTrackHeight = 10000;		// max height for voxels to track.
@@ -133,7 +133,7 @@ public:
 	virtual ~Scene3DRenderer();
 	void FindClusters(cv::Mat& labels, cv::Mat& centers, std::vector<cv::Vec3i>& coords);
 	void PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame);
-	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels, cv::Mat& labelLookup);
+	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels);
 	void UpdateHistograms(int histIdx, bool online);
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
 	void processForeground(Camera*);
