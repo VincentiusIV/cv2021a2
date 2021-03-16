@@ -48,6 +48,32 @@ struct ColorModel
 		colorMatchings = std::vector<ColorMatching*>();
 	}
 
+	ColorMatching* FindBestMatch(ColorMatching* colorMatch1)
+	{
+		double bestDiff = INFINITY;
+		ColorMatching* bestMatch = NULL;
+		for (size_t pj = 0; pj < colorMatchings.size(); pj++)
+		{
+			ColorMatching* colorMatch2 = colorMatchings[pj];
+			cv::Mat rdMat, gdMat, bdMat;
+			subtract(colorMatch1->redHistogram, colorMatch2->redHistogram, rdMat);
+			subtract(colorMatch1->blueHistogram, colorMatch2->blueHistogram, bdMat);
+			subtract(colorMatch1->greenHistogram, colorMatch2->greenHistogram, gdMat);
+			rdMat = abs(rdMat);
+			bdMat = abs(bdMat);
+			gdMat = abs(gdMat);
+			double diff = sum(rdMat)[0] + sum(bdMat)[0] + sum(gdMat)[0];
+			if (diff < bestDiff)
+			{
+				bestDiff = diff;
+				bestMatch = colorMatch2;
+			}
+		}
+		assert(bestMatch != NULL);
+		return bestMatch;
+	}
+
+
 	std::vector<ColorMatching*> colorMatchings; // size equal to num of clusters.
 };
 
@@ -117,7 +143,7 @@ class Scene3DRenderer
 
 	int m_clusterCount;
 	int m_kmeans_attempts;
-	std::vector<cv::Vec3i> centersCurrentFrame, centersLastFrame;
+	std::vector<cv::Vec3i> centersCurrentFrame;
 
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
@@ -136,6 +162,9 @@ public:
 	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels);
 	void UpdateHistograms(int histIdx, bool online);
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
+	void showColorModels(bool online);
+	void setupTrackingData();
+
 	void processForeground(Camera*);
 	bool processFrame();
 	void processTracking();

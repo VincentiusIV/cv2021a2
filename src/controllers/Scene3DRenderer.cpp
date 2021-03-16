@@ -36,8 +36,7 @@ namespace nl_uu_science_gmt
 		m_colormodels_offline(std::vector<ColorModel*>()),
 		m_colormodels_online(std::vector<ColorModel*>()),
 		m_calibrationFrames(std::vector<std::vector<int>>()),
-		centersCurrentFrame(std::vector<cv::Vec3i>()),
-		centersLastFrame(std::vector<cv::Vec3i>())
+		centersCurrentFrame(std::vector<cv::Vec3i>())
 {
 	m_width = 640;
 	m_height = 480;
@@ -96,6 +95,325 @@ namespace nl_uu_science_gmt
 	createFloorGrid();
 	setTopView();
 
+	setupTrackingData();
+}
+
+/**
+ * Deconstructor
+ * Free the memory of the floor_grid pointer vector
+ */
+Scene3DRenderer::~Scene3DRenderer()
+{
+	for (size_t f = 0; f < m_floor_grid.size(); ++f)
+		for (size_t g = 0; g < m_floor_grid[f].size(); ++g)
+			delete m_floor_grid[f][g];
+}
+
+/**
+ * Process the current frame on each camera
+ */
+bool Scene3DRenderer::processFrame()
+{
+	for (size_t c = 0; c < m_cameras.size(); ++c)
+	{
+		if (m_current_frame == m_previous_frame + 1)
+		{
+			m_cameras[c]->advanceVideoFrame();
+		}
+		else if (m_current_frame != m_previous_frame)
+		{
+			m_cameras[c]->getVideoFrame(m_current_frame);
+		}
+		assert(m_cameras[c] != NULL);
+		processForeground(m_cameras[c]);
+	}
+
+	return true;
+}
+
+/**
+ * Separate the background from the foreground
+ * ie.: Create an 8 bit image where only the foreground of the scene is white (255)
+ */
+void Scene3DRenderer::processForeground(Camera* camera)
+{
+	assert(!camera->getFrame().empty());
+	Mat hsv_image;
+	cvtColor(camera->getFrame(), hsv_image, CV_BGR2HSV);  // from BGR to HSV color space
+
+	vector<Mat> channels;
+	split(hsv_image, channels);  // Split the HSV-channels for further analysis
+
+	// Background subtraction H
+	static float prevNoise = 1000000000000000;
+	const int MAX_ITER = 0;
+	static RNG rng;
+	bool foundBetter = false;
+	for (int i = 0; i < MAX_ITER; i++)
+	{
+		Mat foreground;
+		// 1. set hsv thresholds to random values...
+		// - hue & saturation thresholds greater than 100 tend to remove more detail from the foreground than remove noise.
+		//   its fine to keep some noise outside the silhoutte since we can easily remove this with erosion afterwards.
+		// - value thresholds greater than 100 (in combination with medium/high hue/saturation threshhold) 
+		//   have a good chance at wiping the entire image, clearly undesirable.
+		int ht = rng.uniform(0, 80), st = rng.uniform(0, 80), vt = rng.uniform(0, 80);
+		// 2. try out random thresholds.
+		ApplyThresholds(channels, camera, foreground, ht, st, vt);
+		// 3. check , see if its lower than noise current hsv thresholds
+		double noise = 0.0;
+		// CalculateNoise(foreground, noise); // Not a great estimator for voxel reconstruction, see report.
+		// Instead, calculate noise based on the amount of contours
+
+		// 4. Erode temporarily to remove most noise outside silhoutte and exaggerate noise inside.
+		int erosionType = (preErosionElement == 0) ? MORPH_RECT : ((preErosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+		Mat kernel = getStructuringElement(erosionType, Size(2 * preErosionSize + 1, 2 * preErosionSize + 1), Point(preErosionSize, preErosionSize));
+		erode(foreground, foreground, kernel);
+		// 5. Find contours.
+		vector<vector<Point> > contours;
+		vector<Vec4i> hierarchy;
+		findContours(foreground, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
+		noise = contours.size();
+		// 6. If lower noise, use it.
+		if (noise < prevNoise)
+		{
+			prevNoise = noise;
+			m_h_threshold = ht;
+			m_s_threshold = st;
+			m_v_threshold = vt;
+			cout << "Found better thresholds h:" << m_h_threshold << ",s:" << m_s_threshold << ",v:" << m_v_threshold << endl;
+			foundBetter = true;
+			Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
+			for (size_t i = 0; i < contours.size(); i++)
+			{
+				Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+				drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
+			}
+			imshow("Contours", drawing);
+		}
+	}
+
+	Mat foreground;
+	ApplyThresholds(channels, camera, foreground, m_h_threshold, m_s_threshold, m_v_threshold);
+
+	// Find n draw contours
+
+	// Apply erosion/dilation. Either can be turned off by setting element to 0.
+	int erosionType = (erosionElement == 0) ? MORPH_RECT : ((erosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat erodeKernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
+	erode(foreground, foreground, erodeKernel);
+
+	int dilationType = (dilationElement == 0) ? MORPH_RECT : ((dilationElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
+	Mat dilateKernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
+	dilate(foreground, foreground, dilateKernel);
+
+	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
+
+	camera->setForegroundImage(foreground);
+}
+
+void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt)
+{
+	Mat tmp, background;
+
+	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
+	threshold(tmp, foreground, ht, 255, CV_THRESH_BINARY);
+
+	// Background subtraction S
+	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
+	threshold(tmp, background, st, 255, CV_THRESH_BINARY);
+	bitwise_and(foreground, background, foreground);
+
+	// Background subtraction V
+	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
+	threshold(tmp, background, vt, 255, CV_THRESH_BINARY);
+	bitwise_or(foreground, background, foreground);
+}
+
+void Scene3DRenderer::processTracking()
+{
+	// Find clusters
+	Mat labels, clusterCenters;
+	centersCurrentFrame.clear();
+	FindClusters(labels, clusterCenters, centersCurrentFrame);
+	
+	// Update online color models.
+	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
+	{
+ 		UpdateColorModelFrames(camIdx, true, labels);
+		UpdateHistograms(camIdx, true);
+	}
+
+	// Match offline and online models.
+	for (size_t i = 0; i < m_colormodels_online.size(); i++)
+	{
+		ColorModel* onlineModel = m_colormodels_online[i];
+		ColorModel* offlineModel = m_colormodels_offline[i];
+		for (size_t mi = 0; mi < onlineModel->colorMatchings.size(); mi++)
+		{
+			ColorMatching* onlineMatch = onlineModel->colorMatchings[mi];			
+			ColorMatching* offlineMatch = offlineModel->FindBestMatch(onlineMatch);
+			onlineMatch->personIdx = offlineMatch->personIdx;
+		}
+	}
+
+	//showColorModels(true);
+
+	vector<int> personMap = vector<int>();
+	for (int ci = 0; ci < m_clusterCount; ci++)
+	{
+		int personIdx, i = 0; // majority voting
+		// first pass
+		for (size_t j = 0; j < m_colormodels_online.size(); j++)
+		{
+			ColorMatching* match = m_colormodels_online[j]->colorMatchings[ci];
+			if (i == 0)
+			{
+				personIdx = match->personIdx;
+				i = 1;
+			}
+			else if (personIdx == match->personIdx)
+			{
+				i = i + 1;
+			}
+			else
+			{
+				i = i - 1;
+			}
+		}
+		// second pass
+		for (size_t j = 0; j < m_colormodels_online.size(); j++)
+		{
+			ColorMatching* match = m_colormodels_online[j]->colorMatchings[ci];
+			if (i == 0)
+			{
+				personIdx = match->personIdx;
+				i = 1;
+			}
+			else if (personIdx == match->personIdx)
+			{
+				i = i + 1;
+			}
+			else
+			{
+				i = i - 1;
+			}
+		}
+		personMap.push_back(personIdx);
+	}
+	
+	// Log person map to check
+	for (size_t i = 0; i < personMap.size(); i++)
+	{
+		cout << "Person " << to_string(i) << ": " << centersCurrentFrame[personMap.at(i)] << ",";
+	}
+	cout << endl;
+
+
+	// Apply colors to voxels according to person map.
+	for (size_t vi = 0; vi < m_reconstructor.getVisibleVoxels().size(); vi++)
+	{
+		Reconstructor::Voxel* voxel = m_reconstructor.getVisibleVoxels()[vi];
+		int labelIdx = labels.at<int>(vi, 0);
+		int personIdx = personMap.at(labelIdx);
+		if (personIdx == 0)
+			voxel->color = Vec4f(1,0,0,1);
+		else if (personIdx == 1)
+			voxel->color = Vec4f(0, 1, 0, 1);
+		else if (personIdx == 2)
+			voxel->color = Vec4f(0, 0, 1, 1);
+		else if (personIdx == 3)
+			voxel->color = Vec4f(0.5, 0.5, 0, 1);
+	}
+}
+
+void Scene3DRenderer::UpdateColorModelFrames(int camIdx, bool online, cv::Mat& labels)
+{
+	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
+	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
+	{
+		colorModel->colorMatchings[i]->frame.setTo(Scalar(0, 0, 0));
+	}
+	// Put all colors of voxels that are visible from m_cameras[camIdx] into color matching bins.
+	for (size_t vi = 0; vi < m_reconstructor.getVisibleVoxels().size(); vi++)
+	{
+		Reconstructor::Voxel* voxel = m_reconstructor.getVisibleVoxels()[vi];
+		// If voxel is visible on the current camera, find which label it belongs to.
+		if (voxel->valid_camera_projection[camIdx])
+		{
+			if (voxel->z < m_minVoxelTrackHeight || voxel->z > m_maxVoxelTrackHeight)
+				continue;
+			int labelIdx = labels.at<int>(vi, 0); // this refers to center idx, which != personIdx consistently.
+			// Get the color matching of label.
+			Vec3b pixelColor = voxel->pixel_colors[camIdx];
+			// Set the pixel color of the color matching frame.
+			colorModel->colorMatchings[labelIdx]->frame.at<Vec3b>(voxel->camera_projection[camIdx]) = pixelColor;
+		}
+	}
+}
+
+void Scene3DRenderer::UpdateHistograms(int camIdx, bool online)
+{
+	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
+	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
+	{
+		ColorMatching* colorMatching = colorModel->colorMatchings[i];
+		cv::Mat frame = colorMatching->frame;
+		cvtColor(frame, frame, CV_BGR2HSV);
+
+		std::vector<cv::Mat> splitFrame;
+		split(frame, splitFrame);
+		int numOfBins = 16;
+		// Exclude 0 since most of frame will be black.
+		float range[] = { 1, 256 };
+		const float* histRange = { range };
+		cv::calcHist(&splitFrame[0], 1, 0, cv::Mat(), colorMatching->blueHistogram, 1, &numOfBins, &histRange, true, false);
+		cv::calcHist(&splitFrame[1], 1, 0, cv::Mat(), colorMatching->greenHistogram, 1, &numOfBins, &histRange, true, false);
+		cv::calcHist(&splitFrame[2], 1, 0, cv::Mat(), colorMatching->redHistogram, 1, &numOfBins, &histRange, true, false);
+		//PlotHistogram(histSize, colorMatching->blueHistogram, colorMatching->greenHistogram, colorMatching->redHistogram, i, frame);
+	}
+}
+
+void Scene3DRenderer::PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame)
+{
+	int hist_w = 512, hist_h = 400;
+	int bin_w = cvRound((double)hist_w / histSize);
+	Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
+	normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	for (int i = 1; i < histSize; i++)
+	{
+		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(b_hist.at<float>(i - 1))),
+			Point(bin_w * (i), hist_h - cvRound(b_hist.at<float>(i))), Scalar(255, 0, 0), 2, 8, 0);
+		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(g_hist.at<float>(i - 1))),
+			Point(bin_w * (i), hist_h - cvRound(g_hist.at<float>(i))), Scalar(0, 255, 0), 2, 8, 0);
+		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(r_hist.at<float>(i - 1))),
+			Point(bin_w * (i), hist_h - cvRound(r_hist.at<float>(i))), Scalar(0, 0, 255), 2, 8, 0);
+	}
+	imshow("1 Source image" + std::to_string(histIdx), frame);
+	imshow("1 calcHist Demo" + std::to_string(histIdx), histImage);
+}
+
+void Scene3DRenderer::FindClusters(cv::Mat& labels, cv::Mat& clusterCenters, std::vector<cv::Vec3i>& coords)
+{
+	std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
+	std::cout << "Size visible voxels" << visibleVoxels.size() << std::endl;
+	cv::Mat matrix_coords = Mat::zeros(visibleVoxels.size(), 2, CV_32F);
+	// Convert visible voxels into a 2D matrix, ignoring the z-axis.
+	for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
+	{
+		Reconstructor::Voxel* voxel = visibleVoxels[vi];
+		coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0));
+		matrix_coords.at<float>(vi, 0) = coords.back()[0];
+		matrix_coords.at<float>(vi, 1) = coords.back()[1];
+	}
+	cv::kmeans(matrix_coords, m_clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), m_kmeans_attempts, KMEANS_RANDOM_CENTERS, clusterCenters);
+}
+
+
+void Scene3DRenderer::setupTrackingData()
+{
 	m_clusterCount = 4;
 	m_kmeans_attempts = 20;
 
@@ -167,309 +485,48 @@ namespace nl_uu_science_gmt
 	for (int i = 0; i < m_clusterCount; i++)
 	{
 		ColorModel* cm = m_colormodels_offline[i];
-
 		for (int j = 0; j < cm->colorMatchings.size(); j++)
 		{
-			// Compare distance to other models, 
 			ColorMatching* colorMatch1 = cm->colorMatchings[j];
 			if (i == 0)
 				colorMatch1->personIdx = j;
-
 			for (size_t pi = 0; pi < m_clusterCount; pi++)
 			{
 				if (i == pi) continue;
 				ColorModel* othercm = m_colormodels_offline[pi];
-				
-				double bestDiff = INFINITY;
-				ColorMatching* bestMatch = NULL;
-				for (size_t pj = 0; pj < othercm->colorMatchings.size(); pj++)
-				{
-					ColorMatching* colorMatch2 = othercm->colorMatchings[pj];
-					Mat rdMat, gdMat, bdMat;
-					//subtract(colorMatch1->redHistogram, colorMatch2->redHistogram, rdMat);
-					subtract(colorMatch1->blueHistogram, colorMatch2->blueHistogram, bdMat);
-					subtract(colorMatch1->greenHistogram, colorMatch2->greenHistogram, gdMat);
-					//rdMat = abs(rdMat);
-					bdMat = abs(bdMat);
-					gdMat = abs(gdMat);
-					double diff = sum(rdMat)[0] + sum(bdMat)[0] + sum(gdMat)[0]; 
-					if( diff < bestDiff)
-					{
-						bestDiff = diff;
-						bestMatch = colorMatch2;
-					}
-				}
-				assert(bestMatch != NULL);
+				ColorMatching* bestMatch = othercm->FindBestMatch(colorMatch1);
 				bestMatch->personIdx = colorMatch1->personIdx;
 			}
 		}
 	}
 
-	// Check if it worked.
+	//showColorModels(false);
+}
+
+void Scene3DRenderer::showColorModels(bool online)
+{
 	int imgIdx = 0;
 	for (size_t showIdx = 0; showIdx < m_clusterCount; showIdx++)
 	{
 		for (size_t i = 0; i < m_clusterCount; i++)
 		{
-			ColorModel* cm = m_colormodels_offline[i];
+			ColorModel* cm = online ? m_colormodels_online[i] : m_colormodels_offline[i];
 			for (size_t j = 0; j < cm->colorMatchings.size(); j++)
 			{
 				if (cm->colorMatchings[j]->personIdx == showIdx)
 				{
-					imshow(to_string(imgIdx++) + "-"+ to_string(i) + " person " + to_string(showIdx), cm->colorMatchings[j]->frame);
-					
+					imshow(to_string(imgIdx++) + "-" + to_string(i) + " person " + to_string(showIdx), cm->colorMatchings[j]->frame);
 				}
 			}
 		}
 	}
-}
-
-void Scene3DRenderer::UpdateColorModelFrames(int camIdx, bool online, cv::Mat& labels)
-{
-	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
-	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
-	{
-		colorModel->colorMatchings[i]->frame.setTo(Scalar(0,0,0));
-	}
-	// Put all colors of voxels that are visible from m_cameras[camIdx] into color matching bins.
-	for (size_t vi = 0; vi < m_reconstructor.getVisibleVoxels().size(); vi++)
-	{
-		Reconstructor::Voxel* voxel = m_reconstructor.getVisibleVoxels()[vi];
-		// If voxel is visible on the current camera, find which label it belongs to.
-		if (voxel->valid_camera_projection[camIdx])
-		{
-			if (voxel->z < m_minVoxelTrackHeight || voxel->z > m_maxVoxelTrackHeight)
-				continue;
-
-			int labelIdx = labels.at<int>(vi, 0); // this refers to center idx, which != personIdx consistently.
-			// Get the color matching of label.
-			Vec3b pixelColor = voxel->pixel_colors[camIdx];
-			// Set the pixel color of the color matching frame.
-			colorModel->colorMatchings[labelIdx]->frame.at<Vec3b>(voxel->camera_projection[camIdx]) = pixelColor;
-		}
-	}
-}
-
-void Scene3DRenderer::UpdateHistograms(int camIdx, bool online)
-{
-	ColorModel* colorModel = online ? m_colormodels_online[camIdx] : m_colormodels_offline[camIdx];
-	for (size_t i = 0; i < colorModel->colorMatchings.size(); i++)
-	{
-		ColorMatching* colorMatching = colorModel->colorMatchings[i];
-		cv::Mat frame = colorMatching->frame;
-		cvtColor(frame, frame, CV_BGR2HSV);
-
-		std::vector<cv::Mat> splitFrame;
-		split(frame, splitFrame);
-		int histSize = 256;
-		// Exclude 0 since most of frame will be black.
-		float range[] = { 1, 256 };
-		const float* histRange = { range };
-		bool uniform = true, accumulate = false;
-		cv::calcHist(&splitFrame[0], 1, 0, cv::Mat(), colorMatching->blueHistogram, 1, &histSize, &histRange, uniform, accumulate);
-		cv::calcHist(&splitFrame[1], 1, 0, cv::Mat(), colorMatching->greenHistogram, 1, &histSize, &histRange, uniform, accumulate);
-		cv::calcHist(&splitFrame[2], 1, 0, cv::Mat(), colorMatching->redHistogram, 1, &histSize, &histRange, uniform, accumulate);
-		PlotHistogram(histSize, colorMatching->blueHistogram, colorMatching->greenHistogram, colorMatching->redHistogram, i, frame);
-	}
-}
-
-void Scene3DRenderer::PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame)
-{
-	int hist_w = 512, hist_h = 400;
-	int bin_w = cvRound((double)hist_w / histSize);
-	Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
-	normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
-	normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
-	normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
-	for (int i = 1; i < histSize; i++)
-	{
-		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(b_hist.at<float>(i - 1))),
-			Point(bin_w * (i), hist_h - cvRound(b_hist.at<float>(i))), Scalar(255, 0, 0), 2, 8, 0);
-		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(g_hist.at<float>(i - 1))),
-			Point(bin_w * (i), hist_h - cvRound(g_hist.at<float>(i))), Scalar(0, 255, 0), 2, 8, 0);
-		line(histImage, Point(bin_w * (i - 1), hist_h - cvRound(r_hist.at<float>(i - 1))),
-			Point(bin_w * (i), hist_h - cvRound(r_hist.at<float>(i))), Scalar(0, 0, 255), 2, 8, 0);
-	}
-	imshow("1 Source image" + std::to_string(histIdx), frame);
-	imshow("1 calcHist Demo" + std::to_string(histIdx), histImage);
-}
-
-void Scene3DRenderer::FindClusters(cv::Mat& labels, cv::Mat& clusterCenters, std::vector<cv::Vec3i>& coords)
-{
-	std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
-	std::cout << "Size visible voxels" << visibleVoxels.size() << std::endl;
-	cv::Mat matrix_coords = Mat::zeros(visibleVoxels.size(), 2, CV_32F);
-	// Convert visible voxels into a 2D matrix, ignoring the z-axis.
-	for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
-	{
-		Reconstructor::Voxel* voxel = visibleVoxels[vi];
-		coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0));
-		matrix_coords.at<float>(vi, 0) = coords.back()[0];
-		matrix_coords.at<float>(vi, 1) = coords.back()[1];
-	}
-
-	cv::kmeans(matrix_coords, m_clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), m_kmeans_attempts, KMEANS_RANDOM_CENTERS, clusterCenters);
-}
-
-/**
- * Deconstructor
- * Free the memory of the floor_grid pointer vector
- */
-Scene3DRenderer::~Scene3DRenderer()
-{
-	for (size_t f = 0; f < m_floor_grid.size(); ++f)
-		for (size_t g = 0; g < m_floor_grid[f].size(); ++g)
-			delete m_floor_grid[f][g];
-}
-
-/**
- * Process the current frame on each camera
- */
-bool Scene3DRenderer::processFrame()
-{
-	for (size_t c = 0; c < m_cameras.size(); ++c)
-	{
-		if (m_current_frame == m_previous_frame + 1)
-		{
-			m_cameras[c]->advanceVideoFrame();
-		}
-		else if (m_current_frame != m_previous_frame)
-		{
-			m_cameras[c]->getVideoFrame(m_current_frame);
-		}
-		assert(m_cameras[c] != NULL);
-		processForeground(m_cameras[c]);
-	}
-
-	return true;
-}
-
-void Scene3DRenderer::processTracking()
-{
-	return;
-	// Find clusters
-	Mat labels, clusterCenters;
-	centersCurrentFrame.clear();
-	FindClusters(labels, clusterCenters, centersCurrentFrame);
-	
-	// Update online color models.
-	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
-	{
- 		UpdateColorModelFrames(camIdx, true, labels);
-		UpdateHistograms(camIdx, true);
-	}
-
-	centersLastFrame.clear();
-	for (size_t i = 0; i < centersCurrentFrame.size(); i++)
-		centersLastFrame.push_back(centersCurrentFrame[i]);
-	// Match offline and online models.
-
-}
-
-void Scene3DRenderer::ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt)
-{
-	Mat tmp, background;
-
-	absdiff(channels[0], camera->getBgHsvChannels().at(0), tmp);
-	threshold(tmp, foreground, ht, 255, CV_THRESH_BINARY);
-
-	// Background subtraction S
-	absdiff(channels[1], camera->getBgHsvChannels().at(1), tmp);
-	threshold(tmp, background, st, 255, CV_THRESH_BINARY);
-	bitwise_and(foreground, background, foreground);
-
-	// Background subtraction V
-	absdiff(channels[2], camera->getBgHsvChannels().at(2), tmp);
-	threshold(tmp, background, vt, 255, CV_THRESH_BINARY);
-	bitwise_or(foreground, background, foreground);
-}
-
-/**
- * Separate the background from the foreground
- * ie.: Create an 8 bit image where only the foreground of the scene is white (255)
- */
-void Scene3DRenderer::processForeground(Camera* camera)
-{
-	assert(!camera->getFrame().empty());
-	Mat hsv_image;
-	cvtColor(camera->getFrame(), hsv_image, CV_BGR2HSV);  // from BGR to HSV color space
-
-	vector<Mat> channels;
-	split(hsv_image, channels);  // Split the HSV-channels for further analysis
-
-	// Background subtraction H
-	static float prevNoise = 1000000000000000;
-	const int MAX_ITER = 0;
-	static RNG rng;
-	bool foundBetter = false;
-	for (int i = 0; i < MAX_ITER; i++)
-	{
-		Mat foreground;
-		// 1. set hsv thresholds to random values...
-		// - hue & saturation thresholds greater than 100 tend to remove more detail from the foreground than remove noise.
-		//   its fine to keep some noise outside the silhoutte since we can easily remove this with erosion afterwards.
-		// - value thresholds greater than 100 (in combination with medium/high hue/saturation threshhold) 
-		//   have a good chance at wiping the entire image, clearly undesirable.
-		int ht = rng.uniform(0, 80), st = rng.uniform(0, 80), vt = rng.uniform(0, 80);
-		// 2. try out random thresholds.
-		ApplyThresholds(channels, camera, foreground, ht, st, vt);
-		// 3. check , see if its lower than noise current hsv thresholds
-		double noise = 0.0;
-		// CalculateNoise(foreground, noise); // Not a great estimator for voxel reconstruction, see report.
-		// Instead, calculate noise based on the amount of contours
-
-		// 4. Erode temporarily to remove most noise outside silhoutte and exaggerate noise inside.
-		int erosionType = (preErosionElement == 0) ? MORPH_RECT : ((preErosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
-		Mat kernel = getStructuringElement(erosionType, Size(2 * preErosionSize + 1, 2 * preErosionSize + 1), Point(preErosionSize, preErosionSize));
-		erode(foreground, foreground, kernel);
-		// 5. Find contours.
-		vector<vector<Point> > contours;
-		vector<Vec4i> hierarchy;
-		findContours(foreground, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
-		noise = contours.size();
-		// 6. If lower noise, use it.
-		if (noise < prevNoise)
-		{
-			prevNoise = noise;
-			m_h_threshold = ht;
-			m_s_threshold = st;
-			m_v_threshold = vt;
-			cout << "Found better thresholds h:" << m_h_threshold << ",s:" << m_s_threshold << ",v:" << m_v_threshold << endl;
-			foundBetter = true;
-			Mat drawing = Mat::zeros(foreground.size(), CV_8UC3);
-			for (size_t i = 0; i < contours.size(); i++)
-			{
-				Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-				drawContours(drawing, contours, (int)i, color, 2, LINE_8, hierarchy, 0);
-			}    
-			imshow("Contours", drawing);
-		}
-	}
-
-	Mat foreground;
-	ApplyThresholds(channels, camera, foreground, m_h_threshold, m_s_threshold, m_v_threshold);
-
-	// Find n draw contours
-
-	// Apply erosion/dilation. Either can be turned off by setting element to 0.
-	int erosionType = (erosionElement == 0) ? MORPH_RECT : ((erosionElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
-	Mat erodeKernel = getStructuringElement(erosionType, Size(2 * erosionSize + 1, 2 * erosionSize + 1), Point(erosionSize, erosionSize));
-	erode(foreground, foreground, erodeKernel);
-
-	int dilationType = (dilationElement == 0) ? MORPH_RECT : ((dilationElement == 1) ? MORPH_CROSS : MORPH_ELLIPSE);
-	Mat dilateKernel = getStructuringElement(dilationType, Size(2 * dilationSize + 1, 2 * dilationSize + 1), Point(dilationSize, dilationSize));
-	dilate(foreground, foreground, dilateKernel);
-
-	// TODO: Post-processing: blob detection or Graph cuts (Seam finding) could work.
-
-	camera->setForegroundImage(foreground);
+	waitKey();
 }
 
 /**
  * Set currently visible camera to the given camera id
  */
-void Scene3DRenderer::setCamera(
-		int camera)
+void Scene3DRenderer::setCamera(int camera)
 {
 	m_camera_view = true;
 
@@ -500,6 +557,7 @@ void Scene3DRenderer::setTopView()
 	m_arcball_centre = vec(0.0f, 0.0f, 0.0f);
 	m_arcball_up = vec(0.0f, 1.0f, 0.0f);
 }
+
 
 /**
  * Create a LUT for the floor grid
