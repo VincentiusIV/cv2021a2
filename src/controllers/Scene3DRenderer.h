@@ -83,8 +83,9 @@ class Scene3DRenderer
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
 	std::vector<ColorModel*> m_colormodels_offline; // Color models for each camera, offline. 
 	std::vector<ColorModel*> m_colormodels_online; // Color models for each camera, online. 
-	
 	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
+	std::vector<std::vector<cv::Vec2f>> m_personPositions; // Positions of people for each frame.
+
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
 
@@ -141,9 +142,8 @@ class Scene3DRenderer
 	int m_minVoxelTrackHeight = 900;		// min height for voxels to track.
 	int m_maxVoxelTrackHeight = 10000;		// max height for voxels to track.
 
-	int m_clusterCount;
+	int m_peopleCount;
 	int m_kmeans_attempts;
-	std::vector<cv::Vec3i> centersCurrentFrame;
 
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
@@ -157,13 +157,14 @@ class Scene3DRenderer
 public:
 	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
-	void FindClusters(cv::Mat& labels, cv::Mat& centers, std::vector<cv::Vec3i>& coords);
+	void FindClusters(cv::Mat& labels, cv::Mat& centers);
 	void PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame);
 	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels);
 	void UpdateHistograms(int histIdx, bool online);
 	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
 	void showColorModels(bool online);
 	void setupTrackingData();
+	cv::Vec4f getPersonColor(int personIdx);
 
 	void processForeground(Camera*);
 	bool processFrame();

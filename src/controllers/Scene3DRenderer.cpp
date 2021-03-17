@@ -36,7 +36,7 @@ namespace nl_uu_science_gmt
 		m_colormodels_offline(std::vector<ColorModel*>()),
 		m_colormodels_online(std::vector<ColorModel*>()),
 		m_calibrationFrames(std::vector<std::vector<int>>()),
-		centersCurrentFrame(std::vector<cv::Vec3i>())
+		m_personPositions(vector<vector<Vec2f>>())
 {
 	m_width = 640;
 	m_height = 480;
@@ -234,8 +234,7 @@ void Scene3DRenderer::processTracking()
 {
 	// Find clusters
 	Mat labels, clusterCenters;
-	centersCurrentFrame.clear();
-	FindClusters(labels, clusterCenters, centersCurrentFrame);
+	FindClusters(labels, clusterCenters);
 	
 	// Update online color models.
 	for (size_t camIdx = 0; camIdx < m_cameras.size(); camIdx++)
@@ -259,56 +258,66 @@ void Scene3DRenderer::processTracking()
 
 	//showColorModels(true);
 
+	// Create person map to map cluster positions to person indices using majority voting algorithm.
 	vector<int> personMap = vector<int>();
-	for (int ci = 0; ci < m_clusterCount; ci++)
+	for (int ci = 0; ci < m_peopleCount; ci++)
 	{
-		int personIdx, i = 0; // majority voting
+		int personIdx, count = 0;
 		// first pass
 		for (size_t j = 0; j < m_colormodels_online.size(); j++)
 		{
 			ColorMatching* match = m_colormodels_online[j]->colorMatchings[ci];
-			if (i == 0)
+			if (count == 0)
 			{
 				personIdx = match->personIdx;
-				i = 1;
+				count = 1;
 			}
 			else if (personIdx == match->personIdx)
 			{
-				i = i + 1;
+				count = count + 1;
 			}
 			else
 			{
-				i = i - 1;
+				count = count - 1;
 			}
 		}
 		// second pass
 		for (size_t j = 0; j < m_colormodels_online.size(); j++)
 		{
 			ColorMatching* match = m_colormodels_online[j]->colorMatchings[ci];
-			if (i == 0)
+			if (count == 0)
 			{
 				personIdx = match->personIdx;
-				i = 1;
+				count = 1;
 			}
 			else if (personIdx == match->personIdx)
 			{
-				i = i + 1;
+				count = count + 1;
 			}
 			else
 			{
-				i = i - 1;
+				count = count - 1;
 			}
 		}
+
+		Vec2f center = Vec2f(clusterCenters.at<float>(ci, 0), clusterCenters.at<float>(ci, 1));
+		float bestMagnitude = INFINITY;
+		int closestPersonIdx = personIdx;
+		for (size_t i = 0; i < 4; i++)
+		{
+			Vec2f personPos = m_personPositions[i][m_previous_frame];
+			Vec2f diff = center - personPos;
+			double magnitude = sqrtf(diff[0] * diff[0] + diff[1] * diff[1]);
+			if (magnitude < bestMagnitude)
+			{
+				bestMagnitude = magnitude;
+				closestPersonIdx = i;
+			}
+		}
+		if (count <= 1)
+			personIdx = closestPersonIdx;
 		personMap.push_back(personIdx);
 	}
-	
-	// Log person map to check
-	for (size_t i = 0; i < personMap.size(); i++)
-	{
-		cout << "Person " << to_string(i) << ": " << centersCurrentFrame[personMap.at(i)] << ",";
-	}
-	cout << endl;
-
 
 	// Apply colors to voxels according to person map.
 	for (size_t vi = 0; vi < m_reconstructor.getVisibleVoxels().size(); vi++)
@@ -316,15 +325,47 @@ void Scene3DRenderer::processTracking()
 		Reconstructor::Voxel* voxel = m_reconstructor.getVisibleVoxels()[vi];
 		int labelIdx = labels.at<int>(vi, 0);
 		int personIdx = personMap.at(labelIdx);
-		if (personIdx == 0)
-			voxel->color = Vec4f(1,0,0,1);
-		else if (personIdx == 1)
-			voxel->color = Vec4f(0, 1, 0, 1);
-		else if (personIdx == 2)
-			voxel->color = Vec4f(0, 0, 1, 1);
-		else if (personIdx == 3)
-			voxel->color = Vec4f(0.5, 0.5, 0, 1);
+		voxel->color = getPersonColor(personIdx);
 	}
+
+	// Save positions per person
+	for (size_t i = 0; i < m_peopleCount; i++)
+	{
+		int personIdx = personMap.at(i);
+		Vec2f center = Vec2f(clusterCenters.at<float>(i, 0), clusterCenters.at<float>(i, 1));
+		m_personPositions[personIdx][m_current_frame] = center;
+	}
+
+	// Draw position map
+	int mapSize = 1024, maxDist = 100;
+	Mat peoplePositionMap(mapSize, mapSize, CV_32FC3, Scalar(0, 0, 0));
+	for (int i = 0; i < m_peopleCount; i++)
+	{
+		Vec4f color = getPersonColor(i);
+		int m = min(m_current_frame, (int)m_personPositions[i].size());
+		for (int j = 1; j < m; j++)
+		{
+			Vec2f v1 = (m_personPositions[i][j - 1]);
+			Vec2f v2 = (m_personPositions[i][j]);
+			if (v1[0] == 0 && v1[1] == 0 || v2[0] == 0 && v2[1] == 0)
+				continue;
+			Vec2f diff = v2 - v1;
+			double magnitude = sqrtf(diff[0] * diff[0] + diff[1] * diff[1]);
+			if (magnitude > maxDist)
+				continue;
+
+			v1 += Vec2f(3096, 1048);
+			v2 += Vec2f(3096, 1048);
+			v1 /= 4096;
+			v2 /= 4096;
+			v1 *= mapSize;
+			v2 *= mapSize;
+			Point p1 = Point(v1[0], v1[1]);
+			Point p2 = Point(v2[0], v2[1]); 
+			line(peoplePositionMap, p1, p2, Scalar(color[0], color[1], color[2]), 2, 8, 0);
+		}		
+	}
+	imshow("People Position Map", peoplePositionMap);
 }
 
 void Scene3DRenderer::UpdateColorModelFrames(int camIdx, bool online, cv::Mat& labels)
@@ -363,7 +404,7 @@ void Scene3DRenderer::UpdateHistograms(int camIdx, bool online)
 
 		std::vector<cv::Mat> splitFrame;
 		split(frame, splitFrame);
-		int numOfBins = 16;
+		int numOfBins = 32;
 		// Exclude 0 since most of frame will be black.
 		float range[] = { 1, 256 };
 		const float* histRange = { range };
@@ -395,7 +436,7 @@ void Scene3DRenderer::PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hi
 	imshow("1 calcHist Demo" + std::to_string(histIdx), histImage);
 }
 
-void Scene3DRenderer::FindClusters(cv::Mat& labels, cv::Mat& clusterCenters, std::vector<cv::Vec3i>& coords)
+void Scene3DRenderer::FindClusters(cv::Mat& labels, cv::Mat& clusterCenters)
 {
 	std::vector<Reconstructor::Voxel*> visibleVoxels = m_reconstructor.getVisibleVoxels();
 	std::cout << "Size visible voxels" << visibleVoxels.size() << std::endl;
@@ -404,17 +445,16 @@ void Scene3DRenderer::FindClusters(cv::Mat& labels, cv::Mat& clusterCenters, std
 	for (size_t vi = 0; vi < visibleVoxels.size(); vi++)
 	{
 		Reconstructor::Voxel* voxel = visibleVoxels[vi];
-		coords.push_back(cv::Vec3i(voxel->x, voxel->y, 0));
-		matrix_coords.at<float>(vi, 0) = coords.back()[0];
-		matrix_coords.at<float>(vi, 1) = coords.back()[1];
+		matrix_coords.at<float>(vi, 0) = voxel->x;
+		matrix_coords.at<float>(vi, 1) = voxel->y;
 	}
-	cv::kmeans(matrix_coords, m_clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), m_kmeans_attempts, KMEANS_RANDOM_CENTERS, clusterCenters);
+	cv::kmeans(matrix_coords, m_peopleCount, labels, TermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 0.0001), m_kmeans_attempts, KMEANS_RANDOM_CENTERS, clusterCenters);
 }
 
 
 void Scene3DRenderer::setupTrackingData()
 {
-	m_clusterCount = 4;
+	m_peopleCount = 4;
 	m_kmeans_attempts = 20;
 
 	for (size_t i = 0; i < m_cameras.size(); i++)
@@ -423,6 +463,17 @@ void Scene3DRenderer::setupTrackingData()
 	{
 		m_colormodels_offline.push_back(new ColorModel());
 		m_colormodels_online.push_back(new ColorModel());
+	}
+
+	// init person positions 2D vector
+	for (size_t i = 0; i < m_peopleCount; i++)
+	{
+		// one vector per person, one position per frame.
+		m_personPositions.push_back(std::vector<cv::Vec2f>());
+		for (size_t j = 0; j < m_number_of_frames; j++)
+		{
+			m_personPositions[i].push_back(Vec2f());
+		}
 	}
 
 	m_calibrationFrames[0].push_back(70);
@@ -446,8 +497,7 @@ void Scene3DRenderer::setupTrackingData()
 			m_reconstructor.update();
 
 			Mat labels, clusterCenters;
-			std::vector<cv::Vec3i> coords = std::vector<cv::Vec3i>();
-			FindClusters(labels, clusterCenters, coords);
+			FindClusters(labels, clusterCenters);
 
 			double dist1 = norm(clusterCenters.row(0), clusterCenters.row(1), NORM_L2);
 			double dist2 = norm(clusterCenters.row(0), clusterCenters.row(2), NORM_L2);
@@ -467,7 +517,7 @@ void Scene3DRenderer::setupTrackingData()
 			{
 				// Create new empty color model for current camera if at first image, for both offline and online version.
 				Mat frame = m_cameras[camIdx]->getFrame();
-				for (size_t i = 0; i < m_clusterCount; i++)
+				for (size_t i = 0; i < m_peopleCount; i++)
 				{
 					int rows = frame.size().height, cols = frame.size().width;
 					m_colormodels_offline[camIdx]->colorMatchings.push_back(new ColorMatching(rows, cols, frame.type()));
@@ -482,7 +532,7 @@ void Scene3DRenderer::setupTrackingData()
 	}
 
 	// Find matchings on different cameras of the same person, and set their personIdx.
-	for (int i = 0; i < m_clusterCount; i++)
+	for (int i = 0; i < m_peopleCount; i++)
 	{
 		ColorModel* cm = m_colormodels_offline[i];
 		for (int j = 0; j < cm->colorMatchings.size(); j++)
@@ -490,7 +540,7 @@ void Scene3DRenderer::setupTrackingData()
 			ColorMatching* colorMatch1 = cm->colorMatchings[j];
 			if (i == 0)
 				colorMatch1->personIdx = j;
-			for (size_t pi = 0; pi < m_clusterCount; pi++)
+			for (size_t pi = 0; pi < m_peopleCount; pi++)
 			{
 				if (i == pi) continue;
 				ColorModel* othercm = m_colormodels_offline[pi];
@@ -506,9 +556,9 @@ void Scene3DRenderer::setupTrackingData()
 void Scene3DRenderer::showColorModels(bool online)
 {
 	int imgIdx = 0;
-	for (size_t showIdx = 0; showIdx < m_clusterCount; showIdx++)
+	for (size_t showIdx = 0; showIdx < m_peopleCount; showIdx++)
 	{
-		for (size_t i = 0; i < m_clusterCount; i++)
+		for (size_t i = 0; i < m_peopleCount; i++)
 		{
 			ColorModel* cm = online ? m_colormodels_online[i] : m_colormodels_offline[i];
 			for (size_t j = 0; j < cm->colorMatchings.size(); j++)
@@ -521,6 +571,19 @@ void Scene3DRenderer::showColorModels(bool online)
 		}
 	}
 	waitKey();
+}
+
+Vec4f Scene3DRenderer::getPersonColor(int personIdx)
+{
+	if (personIdx == 0)
+		return Vec4f(1, 0, 0, 1);
+	else if (personIdx == 1)
+		return Vec4f(0, 1, 0, 1);
+	else if (personIdx == 2)
+		return Vec4f(0, 0, 1, 1);
+	else if (personIdx == 3)
+		return Vec4f(0.5, 0.5, 0, 1);
+	return Vec4f(0, 0, 0, 0);
 }
 
 /**
