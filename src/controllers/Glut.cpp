@@ -610,6 +610,7 @@ void Glut::update(
 		// If the current frame is different from the last iteration update stuff
 		scene3d.processFrame();
 		scene3d.getReconstructor().update();
+		scene3d.processTracking();
 		scene3d.setPreviousFrame(scene3d.getCurrentFrame());
 	}
 	else if (scene3d.getHThreshold() != scene3d.getPHThreshold() || scene3d.getSThreshold() != scene3d.getPSThreshold()
@@ -618,6 +619,7 @@ void Glut::update(
 		// Update the scene if one of the HSV sliders was moved (when the video is paused)
 		scene3d.processFrame();
 		scene3d.getReconstructor().update();
+		scene3d.processTracking();
 
 		scene3d.setPHThreshold(scene3d.getHThreshold());
 		scene3d.setPSThreshold(scene3d.getSThreshold());
@@ -855,7 +857,7 @@ void Glut::drawVoxels()
 	vector<Reconstructor::Voxel*> voxels = m_Glut->getScene3d().getReconstructor().getVisibleVoxels();
 	for (size_t v = 0; v < voxels.size(); v++)
 	{
-		glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+		glColor4f(voxels[v]->color[0], voxels[v]->color[1], voxels[v]->color[2], voxels[v]->color[3]);
 		glVertex3f((GLfloat) voxels[v]->x, (GLfloat) voxels[v]->y, (GLfloat) voxels[v]->z);
 	}
 

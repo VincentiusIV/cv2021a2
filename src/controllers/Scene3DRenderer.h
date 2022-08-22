@@ -24,10 +24,68 @@
 namespace nl_uu_science_gmt
 {
 
+// For one person on one camera.
+struct ColorMatching
+{
+	ColorMatching(int rows, int cols, int type)
+	{
+		frame = cv::Mat::zeros(rows, cols, type);
+		redHistogram = cv::Mat();
+		greenHistogram = cv::Mat();
+		blueHistogram = cv::Mat();
+		personIdx = 0;
+	}
+
+	int personIdx;
+	cv::Mat frame;
+	cv::Mat redHistogram, greenHistogram, blueHistogram;
+};
+
+struct ColorModel
+{
+	ColorModel()
+	{
+		colorMatchings = std::vector<ColorMatching*>();
+	}
+
+	ColorMatching* FindBestMatch(ColorMatching* colorMatch1)
+	{
+		double bestDiff = INFINITY;
+		ColorMatching* bestMatch = NULL;
+		for (size_t pj = 0; pj < colorMatchings.size(); pj++)
+		{
+			ColorMatching* colorMatch2 = colorMatchings[pj];
+			cv::Mat rdMat, gdMat, bdMat;
+			subtract(colorMatch1->redHistogram, colorMatch2->redHistogram, rdMat);
+			subtract(colorMatch1->blueHistogram, colorMatch2->blueHistogram, bdMat);
+			subtract(colorMatch1->greenHistogram, colorMatch2->greenHistogram, gdMat);
+			rdMat = abs(rdMat);
+			bdMat = abs(bdMat);
+			gdMat = abs(gdMat);
+			double diff = sum(rdMat)[0] + sum(bdMat)[0] + sum(gdMat)[0];
+			if (diff < bestDiff)
+			{
+				bestDiff = diff;
+				bestMatch = colorMatch2;
+			}
+		}
+		assert(bestMatch != NULL);
+		return bestMatch;
+	}
+
+
+	std::vector<ColorMatching*> colorMatchings; // size equal to num of clusters.
+};
+
 class Scene3DRenderer
 {
 	Reconstructor &m_reconstructor;          // Reference to Reconstructor
 	const std::vector<Camera*> &m_cameras;  // Reference to camera's vector
+	std::vector<ColorModel*> m_colormodels_offline; // Color models for each camera, offline. 
+	std::vector<ColorModel*> m_colormodels_online; // Color models for each camera, online. 
+	std::vector<std::vector<int>> &m_calibrationFrames;  // Frames used for calibration
+	std::vector<std::vector<cv::Vec2f>> m_personPositions; // Positions of people for each frame.
+
 	const int m_num;                        // Floor grid scale
 	const float m_sphere_radius;            // ArcBall sphere radius
 
@@ -72,6 +130,21 @@ class Scene3DRenderer
 	int m_v_threshold;                        // Value threshold number for background subtraction
 	int m_pv_threshold;                       // Value threshold value at previous iteration (update awareness)
 
+	int targetNumOfContours = 1;		      // Target number of contours that should appear in the image.
+
+	int preErosionElement = 2;				// 0=Rect, 1=Cross, 2=Ellipse.
+	int preErosionSize = 1;					// Erosion kernel size.
+	int erosionElement = 2;					// 0=Rect, 1=Cross, 2=Ellipse.
+	int erosionSize = 2;					// Erosion kernel size.
+	int dilationElement = 2;					  // 0=Off, 1=Rect, 2=Cross, 3=Ellipse.
+	int dilationSize = 2;					      // Dilation kernel size.
+
+	int m_minVoxelTrackHeight = 900;		// min height for voxels to track.
+	int m_maxVoxelTrackHeight = 10000;		// max height for voxels to track.
+
+	int m_peopleCount;
+	int m_kmeans_attempts;
+
 	// edge points of the virtual ground floor grid
 	std::vector<std::vector<cv::Point3i*> > m_floor_grid;
 
@@ -82,16 +155,21 @@ class Scene3DRenderer
 #endif
 
 public:
-	Scene3DRenderer(
-			Reconstructor &, const std::vector<Camera*> &);
+	Scene3DRenderer(Reconstructor &, const std::vector<Camera*> &);
 	virtual ~Scene3DRenderer();
+	void FindClusters(cv::Mat& labels, cv::Mat& centers);
+	void PlotHistogram(int histSize, cv::Mat& b_hist, cv::Mat& g_hist, cv::Mat& r_hist, int histIdx, cv::Mat frame);
+	void UpdateColorModelFrames(int histIdx, bool online, cv::Mat& labels);
+	void UpdateHistograms(int histIdx, bool online);
+	void ApplyThresholds(std::vector<cv::Mat>& channels, nl_uu_science_gmt::Camera* camera, cv::Mat& foreground, int ht, int st, int vt);
+	void showColorModels(bool online);
+	void setupTrackingData();
+	cv::Vec4f getPersonColor(int personIdx);
 
-	void processForeground(
-			Camera*);
-
+	void processForeground(Camera*);
 	bool processFrame();
-	void setCamera(
-			int);
+	void processTracking();
+	void setCamera(int);
 	void setTopView();
 
 	const std::vector<Camera*>& getCameras() const
